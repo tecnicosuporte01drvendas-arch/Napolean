@@ -1,0 +1,166 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Light Theme - Clean Professional */
+    --background: 220 25% 97%;
+    --foreground: 225 40% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 225 40% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 225 40% 15%;
+
+    /* Professional Cyan Primary */
+    --primary: 190 85% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Light Secondary */
+    --secondary: 220 20% 92%;
+    --secondary-foreground: 225 40% 15%;
+
+    --muted: 220 20% 94%;
+    --muted-foreground: 220 15% 45%;
+
+    /* Purple Accent */
+    --accent: 270 70% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 85% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 88%;
+    --input: 220 20% 92%;
+    --ring: 190 85% 40%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 225 40% 15%;
+    --sidebar-primary: 190 85% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 94%;
+    --sidebar-accent-foreground: 225 40% 15%;
+    --sidebar-border: 220 20% 88%;
+    --sidebar-ring: 190 85% 40%;
+  }
+
+  .dark {
+    /* Deep Navy Space Theme - Napolean Platform */
+    --background: 225 45% 8%;
+    --foreground: 210 40% 98%;
+
+    --card: 225 40% 12%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 225 40% 10%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Neon Cyan Primary */
+    --primary: 190 100% 50%;
+    --primary-foreground: 225 45% 8%;
+
+    /* Glass Secondary */
+    --secondary: 225 30% 18%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 225 25% 20%;
+    --muted-foreground: 215 20% 65%;
+
+    /* Neon Purple Accent */
+    --accent: 270 80% 60%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 85% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 225 30% 20%;
+    --input: 225 30% 18%;
+    --ring: 190 100% 50%;
+
+    --sidebar-background: 225 45% 8%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 190 100% 50%;
+    --sidebar-primary-foreground: 225 45% 8%;
+    --sidebar-accent: 225 30% 18%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 225 30% 20%;
+    --sidebar-ring: 190 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  .dark body {
+    background: linear-gradient(180deg, hsl(225 45% 8%) 0%, hsl(225 50% 6%) 100%);
+  }
+}
+
+@layer components {
+  /* Glassmorphism Effect */
+  .glass {
+    @apply bg-card/70 backdrop-blur-xl border border-border;
+  }
+
+  .dark .glass {
+    @apply border-white/10;
+  }
+
+  .glass-strong {
+    @apply bg-card/90 backdrop-blur-2xl border border-border;
+  }
+
+  .dark .glass-strong {
+    @apply border-white/20;
+  }
+
+  /* Neon Glow Effects - Only in light mode for subtle depth */
+  .glow-primary {
+    box-shadow: 0 2px 8px hsl(var(--primary) / 0.15);
+  }
+
+  .dark .glow-primary {
+    box-shadow: none;
+  }
+
+  .glow-accent {
+    box-shadow: 0 2px 8px hsl(var(--accent) / 0.15);
+  }
+
+  .dark .glow-accent {
+    box-shadow: none;
+  }
+
+  /* Hover Scale Animation */
+  .hover-scale {
+    @apply transition-all duration-300 hover:scale-[1.02];
+  }
+
+  /* Gradient Text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent;
+  }
+
+  /* Light mode shadow for cards */
+  .light-shadow {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  }
+
+  .dark .light-shadow {
+    box-shadow: none;
+  }
+}
