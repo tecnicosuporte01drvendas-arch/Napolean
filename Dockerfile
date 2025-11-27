@@ -1,31 +1,41 @@
-# Etapa 1 - Build com Node
+# ===============================
+# ETAPA 1 — BUILD
+# ===============================
 FROM node:18-alpine AS build
 
 WORKDIR /app
 
-# Copia somente os manifests primeiro (melhora cache)
+# Recebe as variáveis NO BUILD
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+
+# Exporta para o Vite
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+
+# Dependências
 COPY package*.json ./
 RUN npm install
 
-# Copia o restante do código
+# Código
 COPY . .
 
-# Corrige permissão do bin do vite (evita sh: vite: Permission denied)
-RUN chmod +x node_modules/.bin/vite
-
-# Compila o projeto
+# Build
 RUN npm run build
 
-# Etapa 2 - Servidor web com Nginx
+
+# ===============================
+# ETAPA 2 — NGINX
+# ===============================
 FROM nginx:alpine
 
-# Remove o config padrão do nginx
+# Remove config default
 RUN rm /etc/nginx/conf.d/default.conf
 
-# Copia nosso config customizado
+# Copia nginx.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copia os arquivos buildados para o servidor
+# Copia build do Vite
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80
