@@ -146,6 +146,12 @@ const EquipeCSDetail = () => {
       };
     });
 
+    // Adicionar "Nota Final" após "Proposta de Valor" (entre Proposta e Apresentação)
+    radarData.push({
+      step: 'Nota Final',
+      score: Number(avgScore.toFixed(1)),
+    });
+
     return {
       teamStats: {
         avgScore: avgScore.toFixed(1),
@@ -195,40 +201,33 @@ const EquipeCSDetail = () => {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Voltar ao Dashboard
           </Button>
+        </header>
 
-          <div className="glass-strong light-shadow p-6 rounded-2xl">
-            <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
-              <Avatar className="w-24 h-24 border-4 border-primary/50 glow-primary">
-                <AvatarFallback className="bg-primary/20 text-primary text-2xl">
+        {/* Header e Stats Cards - Todos na mesma linha */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          {/* Card do Header - Padronizado */}
+          <Card className="glass light-shadow p-6 hover-scale animate-fade-in h-full flex flex-col">
+            <div className="flex items-start justify-between mb-4">
+              {/* Ícone quadrado no canto esquerdo */}
+              <div className="p-3 rounded-xl bg-primary/20 glow-primary w-12 h-12 flex items-center justify-center">
+                <span className="text-xl font-bold text-primary">
                   {(cs.nome || cs.email).split(' ').map(n => n[0]).join('')}
-                </AvatarFallback>
-              </Avatar>
-
-              <div className="flex-1">
-                <h1 className="text-3xl font-bold gradient-text mb-2">
-                  {cs.nome || cs.email}
-                </h1>
-                <p className="text-muted-foreground mb-4">CS - Sucesso do Cliente</p>
-                <div className="flex flex-wrap gap-4">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-primary" />
-                    <span className="text-sm text-muted-foreground">Média Geral:</span>
-                    <span className="text-lg font-bold text-primary">{teamStats.avgScore}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-accent" />
-                    <span className="text-sm text-muted-foreground">Análises:</span>
-                    <span className="text-lg font-bold text-accent">{teamStats.totalTranscriptions}</span>
-                  </div>
+                </span>
+              </div>
+              {/* Métricas no canto direito com textos */}
+              <div className="text-right">
+                <div className="text-xs text-muted-foreground mb-1">Média: • Análises:</div>
+                <div className="text-2xl font-bold text-primary">
+                  {teamStats.avgScore} • {teamStats.totalTranscriptions}
                 </div>
               </div>
             </div>
-          </div>
-        </header>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card className="glass light-shadow p-6 hover-scale animate-fade-in">
+            <h3 className="text-sm font-medium text-muted-foreground mb-1">{cs.nome || cs.email}</h3>
+            <p className="text-xs text-muted-foreground">
+              CS - Sucesso do Cliente
+            </p>
+          </Card>
+          <Card className="glass light-shadow p-6 hover-scale animate-fade-in h-full flex flex-col">
             <div className="flex items-start justify-between mb-4">
               <div className="p-3 rounded-xl bg-primary/20 glow-primary">
                 <TrendingUp className="w-6 h-6 text-primary" />
@@ -239,7 +238,7 @@ const EquipeCSDetail = () => {
             <p className="text-xs text-muted-foreground">Performance geral</p>
           </Card>
 
-          <Card className="glass light-shadow p-6 hover-scale animate-fade-in">
+          <Card className="glass light-shadow p-6 hover-scale animate-fade-in h-full flex flex-col">
             <div className="flex items-start justify-between mb-4">
               <div className="p-3 rounded-xl bg-accent/20 glow-accent">
                 <FileText className="w-6 h-6 text-accent" />
@@ -252,7 +251,7 @@ const EquipeCSDetail = () => {
             <p className="text-xs text-muted-foreground">Total de análises</p>
           </Card>
 
-          <Card className="glass light-shadow p-6 hover-scale animate-fade-in">
+          <Card className="glass light-shadow p-6 hover-scale animate-fade-in h-full flex flex-col">
             <div className="flex items-start justify-between mb-4">
               <div className="p-3 rounded-xl bg-primary/20">
                 <Trophy className="w-6 h-6 text-primary" />

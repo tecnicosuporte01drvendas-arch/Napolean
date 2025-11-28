@@ -164,3 +164,75 @@ All colors MUST be HSL.
     box-shadow: none;
   }
 }
+
+@layer utilities {
+  /* Custom Scrollbar Styling - Cyan Primary Theme */
+  * {
+    /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.5) hsl(var(--border) / 0.3);
+  }
+
+  *::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: hsl(var(--border) / 0.3);
+    border-radius: 6px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.5);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.7);
+    background-clip: padding-box;
+  }
+
+  /* Scrollbar buttons (arrows) - Webkit only */
+  *::-webkit-scrollbar-button {
+    display: block;
+    width: 12px;
+    height: 12px;
+    background: hsl(var(--primary) / 0.4);
+    border-radius: 6px;
+  }
+
+  *::-webkit-scrollbar-button:hover {
+    background: hsl(var(--primary) / 0.6);
+  }
+
+  *::-webkit-scrollbar-button:vertical:start:decrement {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%23ffffff' d='M4 0l4 4H0z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 6px;
+  }
+
+  *::-webkit-scrollbar-button:vertical:end:increment {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%23ffffff' d='M4 8l-4-4h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 6px;
+  }
+
+  *::-webkit-scrollbar-button:horizontal:start:decrement {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%23ffffff' d='M0 4l4-4v8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 6px;
+  }
+
+  *::-webkit-scrollbar-button:horizontal:end:increment {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%23ffffff' d='M8 4l-4 4V0z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 6px;
+  }
+}

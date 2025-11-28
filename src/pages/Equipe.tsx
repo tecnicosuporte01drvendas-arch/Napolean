@@ -41,15 +41,13 @@ const Equipe = () => {
   const { user } = useAuth();
   const { data: usuariosEscopo, isLoading } = useUsuariosPorEscopo(user || null);
   
-  // Master: mostrar CS, Dev e outros Masters na aba Equipe
+  // Master: mostrar TODOS os gestores na aba Equipe
   const usuarios = useMemo(() => {
     if (!user || !usuariosEscopo) return usuariosEscopo;
     const perfil = user.perfil_sistema || user.tipo || null;
     if (perfil === 'master') {
       return usuariosEscopo.filter(u => 
-        u.perfil_sistema === 'cs' || 
-        u.perfil_sistema === 'dev' || 
-        u.perfil_sistema === 'master'
+        u.perfil_sistema === 'gestor' || u.tipo === 'gestor'
       );
     }
     return usuariosEscopo;

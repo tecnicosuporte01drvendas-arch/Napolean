@@ -103,12 +103,10 @@ const Dashboard = () => {
     // Master / Dev / CS / Gestor: usam escopo calculado pelo hook
     let usuarios = (usuariosEscopo || []).length > 0 ? (usuariosEscopo as Usuario[]) : [user];
     
-    // Master: mostrar CS, Dev e outros Masters na lista da equipe
+    // Master: mostrar TODOS os gestores na lista da equipe
     if (perfil === 'master') {
       usuarios = usuarios.filter(u => 
-        u.perfil_sistema === 'cs' || 
-        u.perfil_sistema === 'dev' || 
-        u.perfil_sistema === 'master'
+        u.perfil_sistema === 'gestor' || u.tipo === 'gestor'
       );
     }
     
@@ -229,6 +227,12 @@ const Dashboard = () => {
         };
       });
 
+      // Adicionar "Nota Final" após "Proposta de Valor" (entre Proposta e Apresentação)
+      radarData.push({
+        step: 'Nota Final',
+        score: Number(avgScore.toFixed(1)),
+      });
+
       return {
         teamStats: {
           avgScore: avgScore.toFixed(1),
@@ -324,6 +328,12 @@ const Dashboard = () => {
         step: step.label,
         score: Number(media.toFixed(1)),
       };
+    });
+
+    // Adicionar "Nota Final" após "Proposta de Valor" (entre Proposta e Apresentação)
+    radarData.push({
+      step: 'Nota Final',
+      score: Number(avgScore.toFixed(1)),
     });
 
     return {

@@ -187,7 +187,7 @@ const AppSidebar = ({ children }: AppSidebarProps) => {
 
       {/* Main Content */}
       <main className={cn(
-        "flex-1 transition-all duration-300",
+        "flex-1 transition-all duration-300 overflow-x-hidden",
         isCollapsed ? "lg:ml-20" : "lg:ml-64"
       )}>
         {/* Mobile Header */}

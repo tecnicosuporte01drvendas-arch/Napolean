@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { useRelatorio } from '@/hooks/useSupabase';
 import { useNavigate } from 'react-router-dom';
 import AppSidebar from '@/components/AppSidebar';
+import jsPDF from 'jspdf';
 
 const RelatorioDetalhado = () => {
   const { id } = useParams<{ id: string }>();
@@ -14,16 +15,56 @@ const RelatorioDetalhado = () => {
   const handleDownload = () => {
     if (!relatorio?.texto_relatorio_completo) return;
 
-    // Criar arquivo de texto
-    const blob = new Blob([relatorio.texto_relatorio_completo], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `relatorio-${relatorio.id}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    // Criar PDF de forma síncrona
+    const doc = new jsPDF();
+    
+    // Configurar fonte e tamanho
+    doc.setFontSize(12);
+    
+    // Obter dimensões da página
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 20;
+    const maxWidth = pageWidth - (margin * 2);
+    
+    // Dividir texto em linhas que cabem na página
+    const lines = doc.splitTextToSize(relatorio.texto_relatorio_completo, maxWidth);
+    
+    let y = margin;
+    const lineHeight = 7;
+    
+    // Adicionar título se houver nome do arquivo
+    if (relatorio.nome_arquivo) {
+      doc.setFontSize(16);
+      doc.setFont(undefined, 'bold');
+      const titleLines = doc.splitTextToSize(relatorio.nome_arquivo, maxWidth);
+      titleLines.forEach((line: string) => {
+        if (y + lineHeight > pageHeight - margin) {
+          doc.addPage();
+          y = margin;
+        }
+        doc.text(line, margin, y);
+        y += lineHeight + 2;
+      });
+      y += 5; // Espaço após título
+    }
+    
+    // Adicionar conteúdo
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'normal');
+    lines.forEach((line: string) => {
+      // Se não couber na página, adiciona nova página
+      if (y + lineHeight > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.text(line, margin, y);
+      y += lineHeight;
+    });
+    
+    // Chamar save() imediatamente - método mais confiável
+    // O save() deve ser chamado de forma totalmente síncrona após o clique
+    doc.save(`relatorio-${relatorio.id}.pdf`);
   };
 
   if (isLoading) {
