@@ -68,6 +68,8 @@ const Login = () => {
           toast({
             title: 'Código enviado!',
             description: `Um código foi enviado para ${email}. Verifique sua caixa de entrada.`,
+            duration: 7000, // 7 segundos
+            variant: 'success', // Usar variante success para destacar
           });
           setStep('otp');
         } else {

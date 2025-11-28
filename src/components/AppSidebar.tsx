@@ -53,7 +53,7 @@ const AppSidebar = ({ children }: AppSidebarProps) => {
       ]
     : [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-        { icon: Users, label: 'Equipe', path: '/equipe' },
+        { icon: Users, label: user?.perfil_sistema === 'master' ? 'Gerenciar Usuários' : 'Equipe', path: '/equipe' },
       ];
 
   const handleLogout = () => {

@@ -494,10 +494,13 @@ const Dashboard = () => {
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-lg font-semibold flex items-center gap-2">
                     <Users className="w-5 h-5 text-accent" />
-                    Equipe
+                    {user?.perfil_sistema === 'master' ? 'Empresa' : 'Equipe'}
                   </h3>
                   <span className="text-sm text-muted-foreground">
-                    {salespeople.length} {salespeople.length === 1 ? 'membro' : 'membros'} da equipe
+                    {user?.perfil_sistema === 'master' 
+                      ? `${salespeople.length} ${salespeople.length === 1 ? 'empresa' : 'empresas'}`
+                      : `${salespeople.length} ${salespeople.length === 1 ? 'membro' : 'membros'} da equipe`
+                    }
                   </span>
                 </div>
 

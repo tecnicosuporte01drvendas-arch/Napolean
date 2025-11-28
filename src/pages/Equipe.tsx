@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit, Trash2, UserPlus, Shield, User } from 'lucide-react';
+import { Plus, Edit, Trash2, UserPlus, Shield, User, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -23,6 +23,14 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -30,7 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { useUsuariosPorEscopo, useCreateUsuario, useUpdateUsuario, useDeleteUsuario } from '@/hooks/useSupabase';
+import { useUsuariosPorEscopo, useCreateUsuario, useUpdateUsuario, useDeleteUsuario, useUsuarios } from '@/hooks/useSupabase';
 import type { Usuario, UsuarioInsert, TipoUsuario, PerfilSistema } from '@/lib/database.types';
 import { Crown, Code, UserCheck } from 'lucide-react';
 import AppSidebar from '@/components/AppSidebar';
@@ -40,14 +48,15 @@ const Equipe = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const { data: usuariosEscopo, isLoading } = useUsuariosPorEscopo(user || null);
+  const { data: todosUsuarios } = useUsuarios(); // Para filtrar Masters e CS
   
-  // Master: mostrar TODOS os gestores na aba Equipe
+  // Master: mostrar todas as roles exceto colaboradores
   const usuarios = useMemo(() => {
     if (!user || !usuariosEscopo) return usuariosEscopo;
     const perfil = user.perfil_sistema || user.tipo || null;
     if (perfil === 'master') {
       return usuariosEscopo.filter(u => 
-        u.perfil_sistema === 'gestor' || u.tipo === 'gestor'
+        u.perfil_sistema !== 'colaborador' && u.tipo !== 'colaborador'
       );
     }
     return usuariosEscopo;
@@ -61,6 +70,7 @@ const Equipe = () => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [usuarioToDelete, setUsuarioToDelete] = useState<Usuario | null>(null);
   const [editingUsuario, setEditingUsuario] = useState<Usuario | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const [formData, setFormData] = useState<{
     nome: string;
@@ -69,6 +79,7 @@ const Equipe = () => {
     tipo: TipoUsuario | '';
     perfilSistema: PerfilSistema | '';
     gestorId: string;
+    responsavelId: string;
   }>({
     nome: '',
     email: '',
@@ -76,6 +87,7 @@ const Equipe = () => {
     tipo: '',
     perfilSistema: '',
     gestorId: '',
+    responsavelId: '',
   });
 
   const resetForm = () => {
@@ -87,6 +99,7 @@ const Equipe = () => {
       tipo: isGestor ? 'colaborador' : '',
       perfilSistema: isGestor ? 'colaborador' : '',
       gestorId: isGestor ? (user?.id || '') : '',
+      responsavelId: '',
     });
     setEditingUsuario(null);
   };
@@ -103,6 +116,7 @@ const Equipe = () => {
           tipo: (editingUsuario.tipo as TipoUsuario) || '',
           perfilSistema: (editingUsuario.perfil_sistema as PerfilSistema) || '',
           gestorId: editingUsuario.gestor_id || '',
+          responsavelId: editingUsuario.cs_id || '',
         });
       } else {
         // Resetar para novo usuário
@@ -133,6 +147,7 @@ const Equipe = () => {
         tipo: (usuario.tipo as TipoUsuario) || '',
         perfilSistema: (usuario.perfil_sistema as PerfilSistema) || '',
         gestorId: usuario.gestor_id || '',
+        responsavelId: usuario.cs_id || '',
       });
     } else {
       // Limpar para novo usuário
@@ -216,7 +231,27 @@ const Equipe = () => {
       tipoFinal = 'gestor';
       perfilSistemaFinal = 'gestor';
       gestorId = null;
-      if (perfil === 'cs') {
+      
+      if (perfil === 'master') {
+        // Master escolhe o responsável (Master ou CS)
+        if (!formData.responsavelId) {
+          toast({
+            title: 'Atenção',
+            description: 'Selecione o responsável (Master ou CS) por este gestor.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        
+        // Verificar se o responsável é CS ou Master
+        const responsavel = todosUsuarios?.find((u) => u.id === formData.responsavelId);
+        if (responsavel?.perfil_sistema === 'cs') {
+          csId = responsavel.id;
+        } else {
+          // Se for Master, não tem cs_id
+          csId = null;
+        }
+      } else if (perfil === 'cs') {
         csId = user.id;
       } else {
         csId = user.cs_id || null;
@@ -410,20 +445,39 @@ const Equipe = () => {
       <div className="p-6 lg:p-8">
         {/* Header */}
         <header className="mb-8 animate-fade-in">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <h1 className="text-3xl lg:text-4xl font-bold gradient-text mb-2">Equipe</h1>
-              <p className="text-muted-foreground">Gerencie os usuários da sua equipe</p>
+              <h1 className="text-3xl lg:text-4xl font-bold gradient-text mb-2">
+                {user?.perfil_sistema === 'master' ? 'Gerenciar Empresas Master' : 'Equipe'}
+              </h1>
+              <p className="text-muted-foreground">
+                {user?.perfil_sistema === 'master' 
+                  ? 'Gerencie os usuarios Gestores/ Devs/ Equipe CS'
+                  : 'Gerencie os usuários da sua equipe'
+                }
+              </p>
             </div>
-            {user && user.perfil_sistema !== 'colaborador' && (
-              <Button
-                onClick={() => handleOpenDialog()}
-                className="gap-2 glow-primary"
-              >
-                <UserPlus className="w-4 h-4" />
-                Novo Usuário
-              </Button>
-            )}
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Buscar usuários..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 w-64"
+                />
+              </div>
+              {user && user.perfil_sistema !== 'colaborador' && (
+                <Button
+                  onClick={() => handleOpenDialog()}
+                  className="gap-2 glow-primary"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  {user?.perfil_sistema === 'master' ? 'Inserir Novo Usuário' : 'Novo Usuário'}
+                </Button>
+              )}
+            </div>
           </div>
         </header>
 
@@ -433,67 +487,91 @@ const Equipe = () => {
             <div className="text-muted-foreground">Carregando...</div>
           </div>
         ) : usuarios && usuarios.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {usuarios
-              ?.filter((usuario) => usuario.id !== user?.id)
-              .map((usuario) => (
-              <Card
-                key={usuario.id}
-                className="glass light-shadow p-6 hover-scale animate-fade-in"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-primary-foreground font-bold text-lg">
-                      {usuario.nome
-                        ? usuario.nome.charAt(0).toUpperCase()
-                        : usuario.email.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-lg">
-                        {usuario.nome || 'Sem nome'}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">{usuario.email}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2 mb-4">
-                  {usuario.telefone && (
-                    <div className="text-sm text-muted-foreground">
-                      📱 {usuario.telefone}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-primary/20 text-primary">
-                      {getTipoIcon(usuario)}
-                      {getTipoLabel(usuario)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex gap-2 pt-4 border-t border-white/10">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 gap-2"
-                    onClick={() => handleOpenDialog(usuario)}
-                  >
-                    <Edit className="w-4 h-4" />
-                    Editar
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => handleDeleteClick(usuario)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Excluir
-                  </Button>
-                </div>
-              </Card>
-            ))}
-          </div>
+          <Card className="glass light-shadow">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-border hover:bg-transparent">
+                  <TableHead className="text-foreground">Usuário</TableHead>
+                  <TableHead className="text-foreground text-center">Email</TableHead>
+                  <TableHead className="text-foreground text-center hidden md:table-cell">Telefone</TableHead>
+                  <TableHead className="text-foreground text-center">Tipo</TableHead>
+                  <TableHead className="text-foreground text-center">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {usuarios
+                  ?.filter((usuario) => {
+                    // Filtrar o próprio usuário
+                    if (usuario.id === user?.id) return false;
+                    
+                    // Filtrar por termo de busca
+                    if (searchTerm.trim() === '') return true;
+                    
+                    const term = searchTerm.toLowerCase();
+                    const nome = (usuario.nome || '').toLowerCase();
+                    const email = (usuario.email || '').toLowerCase();
+                    const tipo = getTipoLabel(usuario).toLowerCase();
+                    
+                    return nome.includes(term) || email.includes(term) || tipo.includes(term);
+                  })
+                  .map((usuario) => (
+                    <TableRow
+                      key={usuario.id}
+                      className="border-border hover:bg-primary/5 dark:hover:bg-white/5 transition-colors"
+                    >
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-primary-foreground font-bold text-sm">
+                            {usuario.nome
+                              ? usuario.nome.charAt(0).toUpperCase()
+                              : usuario.email.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="font-semibold">
+                              {usuario.nome || 'Sem nome'}
+                            </div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-center">
+                        {usuario.email}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-center hidden md:table-cell">
+                        {usuario.telefone || '-'}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded-md bg-primary/20 text-primary text-xs min-w-[80px]">
+                          {getTipoIcon(usuario)}
+                          {getTipoLabel(usuario)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => handleOpenDialog(usuario)}
+                          >
+                            <Edit className="w-4 h-4" />
+                            Editar
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => handleDeleteClick(usuario)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Excluir
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
+          </Card>
         ) : (
           <Card className="glass light-shadow p-12 text-center">
             <UserPlus className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
@@ -514,7 +592,7 @@ const Equipe = () => {
             <form onSubmit={handleSubmit}>
               <DialogHeader>
                 <DialogTitle>
-                  {editingUsuario ? 'Editar Usuário' : 'Novo Usuário'}
+                  {editingUsuario ? 'Editar Usuário' : (user?.perfil_sistema === 'master' ? 'Inserir Novo Usuário' : 'Novo Usuário')}
                 </DialogTitle>
                 <DialogDescription>
                   {editingUsuario
@@ -578,9 +656,9 @@ const Equipe = () => {
                       onValueChange={(value: PerfilSistema) => {
                         // Limpar tipo quando selecionar perfil de sistema
                         if (['master', 'dev', 'cs'].includes(value)) {
-                          setFormData({ ...formData, perfilSistema: value, tipo: '', gestorId: '' });
+                          setFormData({ ...formData, perfilSistema: value, tipo: '', gestorId: '', responsavelId: '' });
                         } else {
-                          setFormData({ ...formData, perfilSistema: value, tipo: value as TipoUsuario });
+                          setFormData({ ...formData, perfilSistema: value, tipo: value as TipoUsuario, responsavelId: '' });
                         }
                       }}
                     >
@@ -662,6 +740,44 @@ const Equipe = () => {
                       <strong>Gestor:</strong> Pode gerenciar usuários e recebe cópia de todos os relatórios.
                       <br />
                       <strong>Colaborador:</strong> Pode enviar áudios/transcrições e recebe apenas seus relatórios.
+                    </p>
+                  </div>
+                )}
+
+                {/* Seleção de Responsável (apenas quando Master criar/editar gestor) */}
+                {user?.perfil_sistema === 'master' && (formData.tipo === 'gestor' || formData.perfilSistema === 'gestor') && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="responsavel">Responsável *</Label>
+                    <Select
+                      value={formData.responsavelId}
+                      onValueChange={(value: string) =>
+                        setFormData({ ...formData, responsavelId: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o responsável (Master ou CS)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(todosUsuarios || [])
+                          .filter((u) => 
+                            u.perfil_sistema === 'master' || u.perfil_sistema === 'cs'
+                          )
+                          .map((responsavel) => (
+                            <SelectItem key={responsavel.id} value={responsavel.id}>
+                              <div className="flex items-center gap-2">
+                                {responsavel.perfil_sistema === 'master' ? (
+                                  <Crown className="w-4 h-4" />
+                                ) : (
+                                  <UserCheck className="w-4 h-4" />
+                                )}
+                                {responsavel.nome || responsavel.email} ({responsavel.perfil_sistema === 'master' ? 'Master' : 'CS'})
+                              </div>
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Selecione o Master ou CS responsável por este gestor.
                     </p>
                   </div>
                 )}

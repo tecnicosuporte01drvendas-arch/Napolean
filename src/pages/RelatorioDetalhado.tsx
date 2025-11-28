@@ -83,7 +83,13 @@ const RelatorioDetalhado = () => {
         <div className="min-h-screen flex items-center justify-center">
           <Card className="glass p-8 text-center max-w-md">
             <p className="text-muted-foreground mb-4">Relatório não encontrado ou ainda não processado.</p>
-            <Button onClick={() => navigate('/nova-analise')}>
+            <Button onClick={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                navigate('/dashboard');
+              }
+            }}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               Voltar
             </Button>
@@ -102,11 +108,11 @@ const RelatorioDetalhado = () => {
             <Button
               variant="ghost"
               onClick={() => {
-                // Se tiver histórico, volta. Senão, vai para Nova Análise
+                // Sempre volta para a tela anterior, nunca para Nova Análise
                 if (window.history.length > 1) {
                   window.history.back();
                 } else {
-                  navigate('/nova-analise');
+                  navigate('/dashboard');
                 }
               }}
               className="hover:bg-primary/10"
