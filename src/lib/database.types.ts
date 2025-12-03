@@ -9,6 +9,7 @@ export interface Usuario {
   email: string;
   telefone?: string | null;
   nome?: string | null;
+  nome_empresa?: string | null;
   tipo?: TipoUsuario | null;
   perfil_sistema?: PerfilSistema | null;
   gestor_id?: string | null;

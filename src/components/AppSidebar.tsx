@@ -31,7 +31,7 @@ const AppSidebar = ({ children }: AppSidebarProps) => {
 
   const isColaborador =
     user?.perfil_sistema === 'colaborador' || user?.tipo === 'colaborador';
-  
+
   const isGestor =
     user?.perfil_sistema === 'gestor' || user?.tipo === 'gestor';
   
@@ -39,6 +39,8 @@ const AppSidebar = ({ children }: AppSidebarProps) => {
     user?.perfil_sistema === 'master' ||
     user?.perfil_sistema === 'dev' ||
     user?.perfil_sistema === 'cs';
+
+  const isMaster = user?.perfil_sistema === 'master';
 
   const navItems = isColaborador
     ? [
@@ -53,7 +55,7 @@ const AppSidebar = ({ children }: AppSidebarProps) => {
       ]
     : [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-        { icon: Users, label: user?.perfil_sistema === 'master' ? 'Gerenciar Usuários' : 'Equipe', path: '/equipe' },
+        { icon: Users, label: isMaster ? 'Gerenciar Empresas' : 'Equipe', path: '/equipe' },
       ];
 
   const handleLogout = () => {
@@ -187,7 +189,7 @@ const AppSidebar = ({ children }: AppSidebarProps) => {
 
       {/* Main Content */}
       <main className={cn(
-        "flex-1 transition-all duration-300 overflow-x-hidden",
+        "flex-1 transition-all duration-300",
         isCollapsed ? "lg:ml-20" : "lg:ml-64"
       )}>
         {/* Mobile Header */}

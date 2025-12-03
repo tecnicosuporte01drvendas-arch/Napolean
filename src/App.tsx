@@ -11,9 +11,11 @@ import Dashboard from "./pages/Dashboard";
 import Equipe from "./pages/Equipe";
 import NovaAnalise from "./pages/NovaAnalise";
 import RelatorioDetalhado from "./pages/RelatorioDetalhado";
+import RelatorioCompleto from "./pages/RelatorioCompleto";
 import SalespersonDetail from "./pages/SalespersonDetail";
 import EquipeCSDetail from "./pages/EquipeCSDetail";
 import EquipeGestorDetail from "./pages/EquipeGestorDetail";
+import EmpresaDetail from "./pages/EmpresaDetail";
 import ColaboradorDetail from "./pages/ColaboradorDetail";
 import NotFound from "./pages/NotFound";
 
@@ -34,8 +36,10 @@ const App = () => (
               <Route path="/equipe" element={<Equipe />} />
               <Route path="/equipe/cs/:id" element={<EquipeCSDetail />} />
               <Route path="/equipe/gestor/:id" element={<EquipeGestorDetail />} />
+              <Route path="/empresa/:nome_empresa" element={<EmpresaDetail />} />
               <Route path="/nova-analise" element={<NovaAnalise />} />
               <Route path="/relatorio/:id" element={<RelatorioDetalhado />} />
+              <Route path="/relatorio/:id/completo" element={<RelatorioCompleto />} />
               <Route path="/colaborador/:id" element={<ColaboradorDetail />} />
               <Route path="/salesperson/:id" element={<SalespersonDetail />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

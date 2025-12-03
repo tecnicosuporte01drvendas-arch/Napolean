@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ShieldCheck, Mail, KeyRound, Loader2 } from 'lucide-react';
+import { ShieldCheck, Mail, KeyRound, Loader2, CheckCircle2, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usuariosService, codigosVerificacaoService } from '@/lib/supabaseServices';
 import { useCreateCode, useValidateCode } from '@/hooks/useSupabase';
@@ -15,6 +16,7 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showSuccessCard, setShowSuccessCard] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { login } = useAuth();
@@ -65,12 +67,7 @@ const Login = () => {
         const emailEnviado = await emailService.sendVerificationCode(email, codigo);
         
         if (emailEnviado) {
-          toast({
-            title: 'Código enviado!',
-            description: `Um código foi enviado para ${email}. Verifique sua caixa de entrada.`,
-            duration: 7000, // 7 segundos
-            variant: 'success', // Usar variante success para destacar
-          });
+          setShowSuccessCard(true);
           setStep('otp');
         } else {
           // Fallback: mostrar código no console se email falhar (desenvolvimento)
@@ -151,11 +148,11 @@ const Login = () => {
 
       <div className="w-full max-w-md relative z-10">
         {/* Logo & Title */}
-        <div className="text-center mb-8 animate-fade-in">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl glass glow-primary mb-4">
+        <div className="text-center mb-4 animate-fade-in">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl glass glow-primary mb-2">
             <ShieldCheck className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="text-4xl font-bold gradient-text mb-2">Napolean</h1>
+          <h1 className="text-3xl font-bold gradient-text mb-1">Napolean</h1>
           <p className="text-muted-foreground">Plataforma de Inteligência em Vendas</p>
         </div>
 
@@ -198,52 +195,83 @@ const Login = () => {
               </Button>
             </form>
           ) : (
-            <form onSubmit={handleOtpSubmit} className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="otp" className="text-foreground flex items-center gap-2">
-                  <KeyRound className="w-4 h-4 text-accent" />
-                  Código de Verificação
-                </Label>
-                <Input
-                  id="otp"
-                  type="text"
-                  placeholder="000000"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  required
-                  maxLength={6}
-                  className="bg-background/50 border-white/10 focus:border-accent transition-colors text-center text-2xl tracking-widest"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Código enviado para {email}
-                </p>
-              </div>
+            <>
+              <form onSubmit={handleOtpSubmit} className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="otp" className="text-foreground flex items-center gap-2">
+                    <KeyRound className="w-4 h-4 text-accent" />
+                    Código de Verificação
+                  </Label>
+                  <Input
+                    id="otp"
+                    type="text"
+                    placeholder="000000"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    required
+                    maxLength={6}
+                    className="bg-background/50 border-white/10 focus:border-accent transition-colors text-center text-2xl tracking-widest"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Código enviado para {email}
+                  </p>
+                </div>
 
-              <div className="space-y-3">
-                <Button 
-                  type="submit" 
-                  className="w-full bg-gradient-to-r from-accent to-primary hover:opacity-90 transition-opacity glow-accent"
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Validando...
-                    </>
-                  ) : (
-                    'Validar Código'
-                  )}
-                </Button>
-                <Button 
-                  type="button"
-                  variant="ghost"
-                  className="w-full text-muted-foreground hover:text-foreground"
-                  onClick={() => setStep('email')}
-                >
-                  Voltar
-                </Button>
-              </div>
-            </form>
+                <div className="space-y-3">
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-gradient-to-r from-accent to-primary hover:opacity-90 transition-opacity glow-accent"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Validando...
+                      </>
+                    ) : (
+                      'Validar Código'
+                    )}
+                  </Button>
+                  <Button 
+                    type="button"
+                    variant="ghost"
+                    className="w-full text-muted-foreground hover:text-foreground"
+                    onClick={() => setStep('email')}
+                  >
+                    Voltar
+                  </Button>
+                </div>
+              </form>
+              
+              {/* Card de Sucesso - Código Enviado */}
+              {showSuccessCard && (
+                <Card className="glass-strong rounded-2xl p-4 shadow-2xl mt-3 border-primary/30 bg-primary/10 animate-fade-in">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3 flex-1">
+                      <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+                        <CheckCircle2 className="w-5 h-5 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-base font-semibold text-foreground mb-0.5">
+                          Código enviado!
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          Um código foi enviado para <span className="font-medium text-foreground">{email}</span>. Verifique sua caixa de entrada.
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="flex-shrink-0 hover:bg-primary/10"
+                      onClick={() => setShowSuccessCard(false)}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </Card>
+              )}
+            </>
           )}
         </div>
 

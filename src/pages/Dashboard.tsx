@@ -1,14 +1,28 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Users,
   TrendingUp,
   FileText,
   Trophy,
   ChevronRight,
+  ChevronLeft,
+  Filter,
+  Search,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   RadarChart,
   Radar,
@@ -24,6 +38,14 @@ import { useUsuariosPorEscopo, useRelatorios, useUsuarios } from '@/hooks/useSup
 import { usuariosService } from '@/lib/supabaseServices';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import type { Usuario, Relatorio } from '@/lib/database.types';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -126,7 +148,7 @@ const Dashboard = () => {
             averageScore: number;
           } | null,
         },
-        radarData: [] as { step: string; score: number }[],
+        radarData: [] as Array<{ step: string; score: number }>,
         salespeople: [] as {
           id: string;
           name: string;
@@ -138,50 +160,63 @@ const Dashboard = () => {
       };
     }
 
-    // Para Master: calcular stats incluindo gestores e colaboradores de cada CS
+    // Para Master: agrupar por empresas únicas
     if (user.perfil_sistema === 'master') {
-      const salespeople = teamUsers.map((u) => {
-        // Se for CS, usar dados do csDadosMap (igual EquipeCSDetail)
-        if (u.perfil_sistema === 'cs') {
-          const usuariosCS = csDadosMap.get(u.id) || [];
-          const teamUserIds = new Set(usuariosCS.map(usuario => usuario.id));
-          
-          // Relatórios de todos os usuários vinculados a este CS
-          const relatoriosVinculados = (relatorios as Relatorio[]).filter(
-            (r) => r.id_usuario && teamUserIds.has(r.id_usuario)
-          );
-          
-          const validScores = relatoriosVinculados.filter((r) => r.nota_media !== null);
-          const averageScore =
-            validScores.length > 0
-              ? validScores.reduce((sum, r) => sum + (r.nota_media || 0), 0) / validScores.length
-              : 0;
+      // Buscar todos os gestores com nome_empresa
+      const gestoresComEmpresa = teamUsers.filter(
+        (u) => (u.perfil_sistema === 'gestor' || u.tipo === 'gestor') && u.nome_empresa
+      );
 
-          return {
-            id: u.id,
-            name: u.nome || u.email,
-            email: u.email,
-            role: u.perfil_sistema || 'Usuário',
-            averageScore,
-            totalTranscriptions: relatoriosVinculados.length,
-          };
+      // Agrupar por nome_empresa
+      const empresasMap = new Map<string, {
+        nome_empresa: string;
+        gestores: Usuario[];
+        userIds: Set<string>;
+      }>();
+
+      gestoresComEmpresa.forEach((gestor) => {
+        const nomeEmpresa = gestor.nome_empresa!;
+        if (!empresasMap.has(nomeEmpresa)) {
+          empresasMap.set(nomeEmpresa, {
+            nome_empresa: nomeEmpresa,
+            gestores: [],
+            userIds: new Set(),
+          });
         }
-        
-        // Para Dev/Master, manter lógica atual (sem relatórios próprios geralmente)
-        const relatoriosUsuario = (relatorios as Relatorio[]).filter((r) => r.id_usuario === u.id);
-        const validScores = relatoriosUsuario.filter((r) => r.nota_media !== null);
+        const empresa = empresasMap.get(nomeEmpresa)!;
+        empresa.gestores.push(gestor);
+        empresa.userIds.add(gestor.id);
+
+        // Adicionar colaboradores de cada gestor
+        if (todosUsuarios) {
+          const colaboradoresGestor = todosUsuarios.filter(
+            (u) => (u.tipo === 'colaborador' || u.perfil_sistema === 'colaborador') && u.gestor_id === gestor.id
+          );
+          colaboradoresGestor.forEach((colab) => {
+            empresa.userIds.add(colab.id);
+          });
+        }
+      });
+
+      // Calcular stats para cada empresa
+      const salespeople = Array.from(empresasMap.values()).map((empresa) => {
+        const relatoriosEmpresa = (relatorios as Relatorio[]).filter(
+          (r) => r.id_usuario && empresa.userIds.has(r.id_usuario)
+        );
+
+        const validScores = relatoriosEmpresa.filter((r) => r.nota_media !== null);
         const averageScore =
           validScores.length > 0
             ? validScores.reduce((sum, r) => sum + (r.nota_media || 0), 0) / validScores.length
             : 0;
 
         return {
-          id: u.id,
-          name: u.nome || u.email,
-          email: u.email,
-          role: u.perfil_sistema || 'Usuário',
+          id: empresa.nome_empresa, // Usar nome_empresa como ID para navegação
+          name: empresa.nome_empresa,
+          email: empresa.nome_empresa,
+          role: 'Empresa',
           averageScore,
-          totalTranscriptions: relatoriosUsuario.length,
+          totalTranscriptions: relatoriosEmpresa.length,
         };
       }).sort((a, b) => b.averageScore - a.averageScore);
 
@@ -211,7 +246,7 @@ const Dashboard = () => {
         { key: 'nota_proposta', label: 'Proposta de Valor' },
       ] as const;
 
-      const radarData = steps.map((step) => {
+      const radarData: Array<{ step: string; score: number }> = steps.map((step) => {
         const valores = (relatorios as Relatorio[])
           .map((r) => r[step.key as keyof Relatorio] as number | null)
           .filter((v): v is number => v !== null);
@@ -314,7 +349,7 @@ const Dashboard = () => {
       { key: 'nota_proposta', label: 'Proposta de Valor' },
     ] as const;
 
-    const radarData = steps.map((step) => {
+    const radarData: Array<{ step: string; score: number }> = steps.map((step) => {
       const valores = relatoriosParaStats
         .map((r) => r[step.key as keyof Relatorio] as number | null)
         .filter((v): v is number => v !== null);
@@ -360,12 +395,58 @@ const Dashboard = () => {
 
   const isColaborador = user?.perfil_sistema === 'colaborador' || user?.tipo === 'colaborador';
 
+  // Estados para filtro e ordenação
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+
+  // Filtrar e ordenar salespeople
+  const filteredAndSortedSalespeople = useMemo(() => {
+    let filtered = salespeople;
+    
+    // Filtrar por termo de busca
+    if (searchTerm) {
+      filtered = filtered.filter(person => 
+        person.name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    // Ordenar por nota
+    const sorted = [...filtered].sort((a, b) => {
+      if (sortOrder === 'desc') {
+        return b.averageScore - a.averageScore;
+      } else {
+        return a.averageScore - b.averageScore;
+      }
+    });
+    
+    return sorted;
+  }, [salespeople, searchTerm, sortOrder]);
+
+  // Paginação
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 3;
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredAndSortedSalespeople.length / itemsPerPage);
+  }, [filteredAndSortedSalespeople.length]);
+
+  const paginatedSalespeople = useMemo(() => {
+    if (!filteredAndSortedSalespeople || filteredAndSortedSalespeople.length === 0) return [];
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredAndSortedSalespeople.slice(startIndex, endIndex);
+  }, [filteredAndSortedSalespeople, currentPage, itemsPerPage]);
+
+  // Resetar página quando filtro mudar
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, sortOrder]);
+
   return (
     <AppSidebar>
-      <div className="p-6 lg:p-8">
+      <div className="p-4 lg:p-6">
         {/* Header */}
-        <header className="mb-8 animate-fade-in">
-          <h1 className="text-3xl lg:text-4xl font-bold gradient-text mb-2">
+        <header className="mb-4 animate-fade-in">
+          <h1 className="text-2xl lg:text-3xl font-bold gradient-text mb-1">
             {headerTitle}
           </h1>
           <p className="text-muted-foreground">
@@ -378,16 +459,16 @@ const Dashboard = () => {
         ) : (
           <>
             {/* Cards principais */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <Card
-                className="glass light-shadow p-6 hover-scale animate-fade-in"
+                className="glass light-shadow p-3 hover-scale animate-fade-in"
                 style={{ animationDelay: '0.1s' }}
               >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="p-3 rounded-xl bg-primary/20 glow-primary">
-                    <TrendingUp className="w-6 h-6 text-primary" />
+                <div className="flex items-start justify-between mb-2">
+                  <div className="p-1.5 rounded-xl bg-primary/20 glow-primary">
+                    <TrendingUp className="w-4 h-4 text-primary" />
                   </div>
-                  <span className="text-3xl font-bold text-primary">
+                  <span className="text-xl font-bold text-primary">
                     {teamStats.avgScore}
                   </span>
                 </div>
@@ -400,14 +481,14 @@ const Dashboard = () => {
               </Card>
 
               <Card
-                className="glass light-shadow p-6 hover-scale animate-fade-in"
+                className="glass light-shadow p-3 hover-scale animate-fade-in"
                 style={{ animationDelay: '0.2s' }}
               >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="p-3 rounded-xl bg-accent/20 glow-accent">
-                    <FileText className="w-6 h-6 text-accent" />
+                <div className="flex items-start justify-between mb-2">
+                  <div className="p-1.5 rounded-xl bg-accent/20 glow-accent">
+                    <FileText className="w-4 h-4 text-accent" />
                   </div>
-                  <span className="text-3xl font-bold text-accent">
+                  <span className="text-xl font-bold text-accent">
                     {teamStats.totalTranscriptions}
                   </span>
                 </div>
@@ -420,14 +501,14 @@ const Dashboard = () => {
               </Card>
 
               <Card
-                className="glass light-shadow p-6 hover-scale animate-fade-in"
+                className="glass light-shadow p-3 hover-scale animate-fade-in"
                 style={{ animationDelay: '0.3s' }}
               >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="p-3 rounded-xl bg-primary/20">
-                    <Trophy className="w-6 h-6 text-primary" />
+                <div className="flex items-start justify-between mb-2">
+                  <div className="p-1.5 rounded-xl bg-primary/20">
+                    <Trophy className="w-4 h-4 text-primary" />
                   </div>
-                  <span className="text-3xl font-bold text-primary">
+                  <span className="text-xl font-bold text-primary">
                     {teamStats.topPerformer
                       ? teamStats.topPerformer.averageScore.toFixed(1)
                       : '0.0'}
@@ -445,17 +526,17 @@ const Dashboard = () => {
             </div>
 
             {/* Gráfico + lista da equipe */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Performance Chart */}
               <Card
-                className="glass light-shadow p-6 animate-fade-in"
+                className="glass light-shadow p-4 animate-fade-in"
                 style={{ animationDelay: '0.4s' }}
               >
-                <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-primary animate-glow-pulse" />
                   {isColaborador ? 'Performance nas 7 Etapas Individual' : 'Performance nas 7 Etapas'}
                 </h3>
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={275}>
                   <RadarChart data={radarData}>
                     <PolarGrid stroke="hsl(var(--border))" />
                     <PolarAngleAxis
@@ -488,26 +569,64 @@ const Dashboard = () => {
 
               {/* Team List */}
               <Card
-                className="glass light-shadow p-6 animate-fade-in"
+                className="glass light-shadow p-4 animate-fade-in"
                 style={{ animationDelay: '0.5s' }}
               >
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold flex items-center gap-2">
                     <Users className="w-5 h-5 text-accent" />
                     {user?.perfil_sistema === 'master' ? 'Empresa' : 'Equipe'}
                   </h3>
-                  <span className="text-sm text-muted-foreground">
-                    {user?.perfil_sistema === 'master' 
-                      ? `${salespeople.length} ${salespeople.length === 1 ? 'empresa' : 'empresas'}`
-                      : `${salespeople.length} ${salespeople.length === 1 ? 'membro' : 'membros'} da equipe`
-                    }
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">
+                      {filteredAndSortedSalespeople.length} {user?.perfil_sistema === 'master' 
+                        ? (filteredAndSortedSalespeople.length === 1 ? 'empresa' : 'empresas')
+                        : (filteredAndSortedSalespeople.length === 1 ? 'membro' : 'membros') + ' da equipe'
+                      }
+                    </span>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <Filter className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-64">
+                        <DropdownMenuLabel>Filtros</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <div className="p-2">
+                          <div className="relative mb-3">
+                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              placeholder={user?.perfil_sistema === 'master' ? "Buscar empresa..." : "Buscar..."}
+                              value={searchTerm}
+                              onChange={(e) => setSearchTerm(e.target.value)}
+                              className="pl-8"
+                            />
+                          </div>
+                          <DropdownMenuLabel>Ordenar por Nota</DropdownMenuLabel>
+                          <DropdownMenuRadioGroup value={sortOrder} onValueChange={(value) => setSortOrder(value as 'desc' | 'asc')}>
+                            <DropdownMenuRadioItem value="desc">
+                              Decrescente
+                            </DropdownMenuRadioItem>
+                            <DropdownMenuRadioItem value="asc">
+                              Crescente
+                            </DropdownMenuRadioItem>
+                          </DropdownMenuRadioGroup>
+                        </div>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
 
-                 <div className="space-y-3 max-h-[340px] overflow-y-auto pr-2">
-                   {salespeople.map((person, index) => {
+                 <div className="space-y-2 mb-4 min-h-[240px]">
+                   {paginatedSalespeople.map((person, index) => {
                      // Determinar rota baseado no perfil do usuário
                      const getRoute = () => {
+                       // Se for Master, navegar para página da empresa
+                       if (user?.perfil_sistema === 'master' && person.role === 'Empresa') {
+                         return `/empresa/${encodeURIComponent(person.name)}`;
+                       }
+                       
                        const usuario = teamUsers.find(u => u.id === person.id);
                        if (!usuario) return `/salesperson/${person.id}`;
                        
@@ -521,7 +640,7 @@ const Dashboard = () => {
                      return (
                      <div
                        key={person.id}
-                       className={`glass p-4 rounded-xl transition-all group ${
+                       className={`glass p-3 rounded-xl transition-all group ${
                          isColaborador 
                            ? '' // Sem hover e cursor para colaborador
                            : 'hover:bg-primary/5 dark:hover:bg-white/5 cursor-pointer'
@@ -529,9 +648,9 @@ const Dashboard = () => {
                        onClick={isColaborador ? undefined : () => navigate(getRoute())}
                        style={{ animationDelay: `${0.6 + index * 0.1}s` }}
                      >
-                       <div className="flex items-center gap-4">
-                         <Avatar className="w-12 h-12 border-2 border-primary/50">
-                           <AvatarFallback className="bg-primary/20 text-primary">
+                       <div className="flex items-center gap-3">
+                         <Avatar className="w-10 h-10 border-2 border-primary/50">
+                           <AvatarFallback className="bg-primary/20 text-primary text-sm">
                              {person.name
                                .split(' ')
                                .map((n) => n[0])
@@ -540,21 +659,21 @@ const Dashboard = () => {
                          </Avatar>
 
                          <div className="flex-1 min-w-0">
-                           <h4 className="font-semibold text-foreground truncate">
+                           <h4 className="font-semibold text-foreground truncate text-sm">
                              {person.name}
                            </h4>
-                           <p className="text-sm text-muted-foreground truncate">
+                           <p className="text-xs text-muted-foreground truncate">
                              {person.role}
                            </p>
                          </div>
 
                          <div className="text-right">
                            <div className="flex items-center gap-2">
-                             <span className="text-2xl font-bold text-primary">
+                             <span className="text-xl font-bold text-primary">
                                {person.averageScore.toFixed(1)}
                              </span>
                              {!isColaborador && (
-                               <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                               <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                              )}
                            </div>
                            <p className="text-xs text-muted-foreground">
@@ -566,6 +685,43 @@ const Dashboard = () => {
                      );
                    })}
                  </div>
+
+                 {/* Paginação */}
+                 {filteredAndSortedSalespeople.length > itemsPerPage && (
+                   <Pagination className="mt-2">
+                     <PaginationContent className="gap-0.5">
+                       <PaginationItem>
+                         <PaginationLink
+                           onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                           className={`${currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} h-7 w-7 text-xs`}
+                         >
+                           <ChevronLeft className="h-3 w-3" />
+                         </PaginationLink>
+                       </PaginationItem>
+                       
+                       {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                         <PaginationItem key={page}>
+                           <PaginationLink
+                             onClick={() => setCurrentPage(page)}
+                             isActive={currentPage === page}
+                             className="cursor-pointer h-7 w-7 text-xs"
+                           >
+                             {page}
+                           </PaginationLink>
+                         </PaginationItem>
+                       ))}
+                       
+                       <PaginationItem>
+                         <PaginationLink
+                           onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                           className={`${currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} h-7 w-7 text-xs`}
+                         >
+                           <ChevronRight className="h-3 w-3" />
+                         </PaginationLink>
+                       </PaginationItem>
+                     </PaginationContent>
+                   </Pagination>
+                 )}
               </Card>
             </div>
           </>

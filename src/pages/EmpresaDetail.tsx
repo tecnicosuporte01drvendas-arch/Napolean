@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -11,6 +11,7 @@ import {
   Trophy,
   Users,
   ChevronRight,
+  Building2,
   Filter,
   Search,
 } from 'lucide-react';
@@ -23,63 +24,40 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import AppSidebar from '@/components/AppSidebar';
-import { useUsuarioById, useRelatorios } from '@/hooks/useSupabase';
+import { useRelatorios, useUsuarios } from '@/hooks/useSupabase';
 import { usuariosService } from '@/lib/supabaseServices';
-import { useQuery } from '@tanstack/react-query';
 import type { Usuario, Relatorio } from '@/lib/database.types';
 
-const EquipeCSDetail = () => {
-  const { id } = useParams<{ id: string }>();
+const EmpresaDetail = () => {
+  const { nome_empresa } = useParams<{ nome_empresa: string }>();
   const navigate = useNavigate();
-  const { data: cs, isLoading: isLoadingCS } = useUsuarioById(id || '');
+  const { data: todosUsuarios, isLoading: isLoadingUsuarios } = useUsuarios();
   const { data: relatorios, isLoading: isLoadingRelatorios } = useRelatorios();
 
-  // Buscar gestores vinculados a este CS
-  const { data: gestores, isLoading: isLoadingGestores } = useQuery({
-    queryKey: ['gestores-cs', id],
-    queryFn: () => usuariosService.getByCsId(id || ''),
-    enabled: !!id,
-  });
+  const isLoading = isLoadingUsuarios || isLoadingRelatorios;
 
-  // Buscar todos os colaboradores dos gestores (para stats gerais)
-  const { data: todosUsuariosCS } = useQuery({
-    queryKey: ['todos-usuarios-cs', id, gestores?.map(g => g.id)],
-    queryFn: async () => {
-      if (!gestores || gestores.length === 0) return [];
-      const todos = [...gestores];
-      // Buscar colaboradores de cada gestor
-      for (const gestor of gestores) {
-        const colaboradores = await usuariosService.getByGestorId(gestor.id);
-        todos.push(...colaboradores.filter(c => c.tipo === 'colaborador'));
-      }
-      return todos;
-    },
-    enabled: !!id && !!gestores && gestores.length > 0,
-  });
-
-  const isLoading = isLoadingCS || isLoadingRelatorios || isLoadingGestores;
-
-  // Calcular estatísticas da equipe completa (gestores + colaboradores)
-  const { teamStats, radarData, gestoresList } = useMemo(() => {
-    if (!cs || !relatorios || !gestores || !todosUsuariosCS) {
+  // Filtrar gestores e colaboradores da empresa
+  const { gestores, colaboradores, teamStats, radarData, gestoresList, colaboradoresList } = useMemo(() => {
+    if (!todosUsuarios || !relatorios || !nome_empresa) {
       return {
+        gestores: [] as Usuario[],
+        colaboradores: [] as Usuario[],
         teamStats: {
           avgScore: '0.0',
           totalTranscriptions: 0,
           topPerformer: null as { id: string; name: string; averageScore: number } | null,
         },
-        radarData: [] as Array<{ step: string; score: number }>,
+        radarData: [] as { step: string; score: number }[],
         gestoresList: [] as {
+          id: string;
+          name: string;
+          email: string;
+          averageScore: number;
+          totalTranscriptions: number;
+        }[],
+        colaboradoresList: [] as {
           id: string;
           name: string;
           email: string;
@@ -89,14 +67,33 @@ const EquipeCSDetail = () => {
       };
     }
 
-    // Usar todos os usuários (gestores + colaboradores) para calcular stats gerais
-    const teamUserIds = new Set(todosUsuariosCS.map(u => u.id));
+    // Filtrar gestores da empresa
+    const gestoresEmpresa = todosUsuarios.filter(
+      (u) => (u.perfil_sistema === 'gestor' || u.tipo === 'gestor') && u.nome_empresa === nome_empresa
+    );
+
+    // Buscar colaboradores de todos os gestores da empresa
+    const colaboradoresEmpresa: Usuario[] = [];
+    for (const gestor of gestoresEmpresa) {
+      const colaboradoresGestor = todosUsuarios.filter(
+        (u) => (u.tipo === 'colaborador' || u.perfil_sistema === 'colaborador') && u.gestor_id === gestor.id
+      );
+      colaboradoresEmpresa.push(...colaboradoresGestor);
+    }
+
+    // IDs de todos os usuários da empresa (gestores + colaboradores)
+    const teamUserIds = new Set([
+      ...gestoresEmpresa.map((g) => g.id),
+      ...colaboradoresEmpresa.map((c) => c.id),
+    ]);
+
+    // Relatórios da empresa
     const teamRelatorios = (relatorios as Relatorio[]).filter(
-      (r) => r.id_usuario && teamUserIds.has(r.id_usuario),
+      (r) => r.id_usuario && teamUserIds.has(r.id_usuario)
     );
 
     // Construir lista de gestores com stats
-    const gestoresList = gestores.map((gestor) => {
+    const gestoresList = gestoresEmpresa.map((gestor) => {
       const relatoriosGestor = teamRelatorios.filter((r) => r.id_usuario === gestor.id);
       const validScores = relatoriosGestor.filter((r) => r.nota_media !== null);
       const averageScore =
@@ -113,20 +110,35 @@ const EquipeCSDetail = () => {
       };
     }).sort((a, b) => b.averageScore - a.averageScore);
 
-    // Estatísticas gerais
-    const totalTranscriptions = gestoresList.reduce(
-      (sum, p) => sum + p.totalTranscriptions,
-      0,
-    );
+    // Construir lista de colaboradores com stats
+    const colaboradoresList = colaboradoresEmpresa.map((colaborador) => {
+      const relatoriosColab = teamRelatorios.filter((r) => r.id_usuario === colaborador.id);
+      const validScores = relatoriosColab.filter((r) => r.nota_media !== null);
+      const averageScore =
+        validScores.length > 0
+          ? validScores.reduce((sum, r) => sum + (r.nota_media || 0), 0) / validScores.length
+          : 0;
 
+      return {
+        id: colaborador.id,
+        name: colaborador.nome || colaborador.email,
+        email: colaborador.email,
+        averageScore,
+        totalTranscriptions: relatoriosColab.length,
+      };
+    }).sort((a, b) => b.averageScore - a.averageScore);
+
+    // Estatísticas gerais da empresa
+    const totalTranscriptions = teamRelatorios.length;
+    const validScores = teamRelatorios.filter((r) => r.nota_media !== null);
     const avgScore =
-      gestoresList.length > 0
-        ? gestoresList.reduce((sum, p) => sum + p.averageScore, 0) / gestoresList.length
+      validScores.length > 0
+        ? validScores.reduce((sum, r) => sum + (r.nota_media || 0), 0) / validScores.length
         : 0;
 
     const topPerformer =
-      gestoresList.length > 0
-        ? gestoresList.reduce((best, current) =>
+      colaboradoresList.length > 0
+        ? colaboradoresList.reduce((best, current) =>
             current.averageScore > best.averageScore ? current : best,
           )
         : null;
@@ -142,7 +154,7 @@ const EquipeCSDetail = () => {
       { key: 'nota_proposta', label: 'Proposta de Valor' },
     ] as const;
 
-    const radarData: Array<{ step: string; score: number }> = steps.map((step) => {
+    const radarData = steps.map((step) => {
       const valores = teamRelatorios
         .map((r) => r[step.key as keyof Relatorio] as number | null)
         .filter((v): v is number => v !== null);
@@ -158,13 +170,15 @@ const EquipeCSDetail = () => {
       };
     });
 
-    // Adicionar "Nota Final" após "Proposta de Valor" (entre Proposta e Apresentação)
+    // Adicionar "Nota Final" após "Proposta de Valor"
     radarData.push({
       step: 'Nota Final',
       score: Number(avgScore.toFixed(1)),
     });
 
     return {
+      gestores: gestoresEmpresa,
+      colaboradores: colaboradoresEmpresa,
       teamStats: {
         avgScore: avgScore.toFixed(1),
         totalTranscriptions,
@@ -172,8 +186,9 @@ const EquipeCSDetail = () => {
       },
       radarData,
       gestoresList,
+      colaboradoresList,
     };
-  }, [cs, relatorios, gestores, todosUsuariosCS]);
+  }, [todosUsuarios, relatorios, nome_empresa]);
 
   // Estados para filtro e ordenação dos gestores
   const [searchTermGestores, setSearchTermGestores] = useState('');
@@ -212,12 +227,12 @@ const EquipeCSDetail = () => {
     );
   }
 
-  if (!cs) {
+  if (!nome_empresa || gestores.length === 0) {
     return (
       <AppSidebar>
         <div className="p-6 lg:p-8">
           <Card className="glass p-8 text-center">
-            <p className="text-muted-foreground mb-4">CS não encontrado</p>
+            <p className="text-muted-foreground mb-4">Empresa não encontrada</p>
             <Button onClick={() => navigate('/dashboard')}>
               Voltar ao Dashboard
             </Button>
@@ -245,44 +260,35 @@ const EquipeCSDetail = () => {
         {/* Header e Stats Cards - Todos na mesma linha */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           {/* Card do Header - Padronizado */}
-          <Card className="glass light-shadow p-4 hover-scale animate-fade-in h-full flex flex-col">
-            <div className="flex items-start justify-between mb-3">
+          <Card className="glass light-shadow p-3 hover-scale animate-fade-in h-full flex flex-col">
+            <div className="flex items-start mb-2">
               {/* Ícone quadrado no canto esquerdo */}
-              <div className="p-2 rounded-xl bg-primary/20 glow-primary w-12 h-12 flex items-center justify-center">
-                <span className="text-xl font-bold text-primary">
-                  {(cs.nome || cs.email).split(' ').map(n => n[0]).join('')}
-                </span>
-              </div>
-              {/* Métricas no canto direito com textos */}
-              <div className="text-right">
-                <div className="text-xs text-muted-foreground mb-1">Média: • Análises:</div>
-                <div className="text-2xl font-bold text-primary">
-                  {teamStats.avgScore} • {teamStats.totalTranscriptions}
-                </div>
+              <div className="p-1.5 rounded-xl bg-primary/20 glow-primary w-10 h-10 flex items-center justify-center">
+                <Building2 className="w-5 h-5 text-primary" />
               </div>
             </div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-1">{cs.nome || cs.email}</h3>
+            <h3 className="text-sm font-medium text-muted-foreground mb-1 truncate">{nome_empresa}</h3>
             <p className="text-xs text-muted-foreground">
-              CS - Sucesso do Cliente
+              Empresa
             </p>
           </Card>
-          <Card className="glass light-shadow p-4 hover-scale animate-fade-in h-full flex flex-col">
-            <div className="flex items-start justify-between mb-3">
-              <div className="p-2 rounded-xl bg-primary/20 glow-primary">
-                <TrendingUp className="w-5 h-5 text-primary" />
+          <Card className="glass light-shadow p-3 hover-scale animate-fade-in h-full flex flex-col">
+            <div className="flex items-start justify-between mb-2">
+              <div className="p-1.5 rounded-xl bg-primary/20 glow-primary">
+                <TrendingUp className="w-4 h-4 text-primary" />
               </div>
-              <span className="text-2xl font-bold text-primary">{teamStats.avgScore}</span>
+              <span className="text-xl font-bold text-primary">{teamStats.avgScore}</span>
             </div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-1">Nota Média da Equipe</h3>
+            <h3 className="text-sm font-medium text-muted-foreground mb-1">Nota Média da Empresa</h3>
             <p className="text-xs text-muted-foreground">Performance geral</p>
           </Card>
 
-          <Card className="glass light-shadow p-4 hover-scale animate-fade-in h-full flex flex-col">
-            <div className="flex items-start justify-between mb-3">
-              <div className="p-2 rounded-xl bg-accent/20 glow-accent">
-                <FileText className="w-5 h-5 text-accent" />
+          <Card className="glass light-shadow p-3 hover-scale animate-fade-in h-full flex flex-col">
+            <div className="flex items-start justify-between mb-2">
+              <div className="p-1.5 rounded-xl bg-accent/20 glow-accent">
+                <FileText className="w-4 h-4 text-accent" />
               </div>
-              <span className="text-2xl font-bold text-accent">
+              <span className="text-xl font-bold text-accent">
                 {teamStats.totalTranscriptions}
               </span>
             </div>
@@ -290,25 +296,25 @@ const EquipeCSDetail = () => {
             <p className="text-xs text-muted-foreground">Total de análises</p>
           </Card>
 
-          <Card className="glass light-shadow p-4 hover-scale animate-fade-in h-full flex flex-col">
-            <div className="flex items-start justify-between mb-3">
-              <div className="p-2 rounded-xl bg-primary/20">
-                <Trophy className="w-5 h-5 text-primary" />
+          <Card className="glass light-shadow p-3 hover-scale animate-fade-in h-full flex flex-col">
+            <div className="flex items-start justify-between mb-2">
+              <div className="p-1.5 rounded-xl bg-primary/20">
+                <Trophy className="w-4 h-4 text-primary" />
               </div>
-              <span className="text-2xl font-bold text-primary">
+              <span className="text-xl font-bold text-primary">
                 {teamStats.topPerformer
                   ? teamStats.topPerformer.averageScore.toFixed(1)
                   : '0.0'}
               </span>
             </div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-1">Melhor Gestor</h3>
+            <h3 className="text-sm font-medium text-muted-foreground mb-1">Melhor Colaborador</h3>
             <p className="text-xs text-muted-foreground">
               {teamStats.topPerformer ? teamStats.topPerformer.name : 'Sem dados suficientes'}
             </p>
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
           {/* Performance Chart */}
           <Card className="glass light-shadow p-4 animate-fade-in">
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -328,7 +334,7 @@ const EquipeCSDetail = () => {
                   tick={{ fill: 'hsl(var(--muted-foreground))' }}
                 />
                 <Radar
-                  name="Média da Equipe"
+                  name="Média da Empresa"
                   dataKey="score"
                   stroke="hsl(var(--primary))"
                   fill="hsl(var(--primary))"
@@ -391,18 +397,18 @@ const EquipeCSDetail = () => {
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               {filteredAndSortedGestores.length > 0 ? (
                 filteredAndSortedGestores.map((gestor, index) => (
                   <div
                     key={gestor.id}
-                    className="glass p-4 rounded-xl hover:bg-primary/5 dark:hover:bg-white/5 transition-all cursor-pointer group"
+                    className="glass p-3 rounded-xl hover:bg-primary/5 dark:hover:bg-white/5 transition-all cursor-pointer group"
                     onClick={() => navigate(`/equipe/gestor/${gestor.id}`)}
                     style={{ animationDelay: `${0.3 + index * 0.05}s` }}
                   >
-                    <div className="flex items-center gap-4">
-                      <Avatar className="w-12 h-12 border-2 border-primary/50">
-                        <AvatarFallback className="bg-primary/20 text-primary">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="w-10 h-10 border-2 border-primary/50">
+                        <AvatarFallback className="bg-primary/20 text-primary text-sm">
                           {gestor.name
                             .split(' ')
                             .map((n) => n[0])
@@ -411,16 +417,16 @@ const EquipeCSDetail = () => {
                       </Avatar>
 
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-foreground truncate">{gestor.name}</h4>
-                        <p className="text-sm text-muted-foreground truncate">Gestor</p>
+                        <h4 className="font-semibold text-foreground truncate text-sm">{gestor.name}</h4>
+                        <p className="text-xs text-muted-foreground truncate">Gestor</p>
                       </div>
 
                       <div className="text-right">
                         <div className="flex items-center gap-2">
-                          <span className="text-2xl font-bold text-primary">
+                          <span className="text-xl font-bold text-primary">
                             {gestor.averageScore.toFixed(1)}
                           </span>
-                          <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                          <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                         </div>
                         <p className="text-xs text-muted-foreground">
                           {gestor.totalTranscriptions} análises
@@ -431,7 +437,7 @@ const EquipeCSDetail = () => {
                 ))
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
-                  Nenhum gestor vinculado ainda.
+                  Nenhum gestor encontrado.
                 </div>
               )}
             </div>
@@ -442,5 +448,5 @@ const EquipeCSDetail = () => {
   );
 };
 
-export default EquipeCSDetail;
+export default EmpresaDetail;
 

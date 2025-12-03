@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit, Trash2, UserPlus, Shield, User, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, UserPlus, Shield, User, Search, Crown, Code, UserCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -39,8 +39,8 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useUsuariosPorEscopo, useCreateUsuario, useUpdateUsuario, useDeleteUsuario, useUsuarios } from '@/hooks/useSupabase';
+import { usuariosService } from '@/lib/supabaseServices';
 import type { Usuario, UsuarioInsert, TipoUsuario, PerfilSistema } from '@/lib/database.types';
-import { Crown, Code, UserCheck } from 'lucide-react';
 import AppSidebar from '@/components/AppSidebar';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -48,7 +48,7 @@ const Equipe = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const { data: usuariosEscopo, isLoading } = useUsuariosPorEscopo(user || null);
-  const { data: todosUsuarios } = useUsuarios(); // Para filtrar Masters e CS
+  const { data: todosUsuarios } = useUsuarios();
   
   // Master: mostrar todas as roles exceto colaboradores
   const usuarios = useMemo(() => {
@@ -76,6 +76,7 @@ const Equipe = () => {
     nome: string;
     email: string;
     telefone: string;
+    nome_empresa: string;
     tipo: TipoUsuario | '';
     perfilSistema: PerfilSistema | '';
     gestorId: string;
@@ -84,6 +85,7 @@ const Equipe = () => {
     nome: '',
     email: '',
     telefone: '',
+    nome_empresa: '',
     tipo: '',
     perfilSistema: '',
     gestorId: '',
@@ -96,6 +98,7 @@ const Equipe = () => {
       nome: '',
       email: '',
       telefone: '',
+      nome_empresa: '',
       tipo: isGestor ? 'colaborador' : '',
       perfilSistema: isGestor ? 'colaborador' : '',
       gestorId: isGestor ? (user?.id || '') : '',
@@ -104,133 +107,86 @@ const Equipe = () => {
     setEditingUsuario(null);
   };
 
-  // Sincronizar formData quando editingUsuario mudar ou dialog abrir
   useEffect(() => {
-    if (isDialogOpen) {
-      if (editingUsuario) {
-        // Preencher com dados do usuário sendo editado
-        setFormData({
-          nome: editingUsuario.nome || '',
-          email: editingUsuario.email,
-          telefone: editingUsuario.telefone || '',
-          tipo: (editingUsuario.tipo as TipoUsuario) || '',
-          perfilSistema: (editingUsuario.perfil_sistema as PerfilSistema) || '',
-          gestorId: editingUsuario.gestor_id || '',
-          responsavelId: editingUsuario.cs_id || '',
-        });
-      } else {
-        // Resetar para novo usuário
-        resetForm();
-        // Se for gestor, garantir que tipo e gestorId estejam definidos
-        const isGestor = user?.perfil_sistema === 'gestor' || user?.tipo === 'gestor';
-        if (isGestor) {
-          setFormData(prev => ({
-            ...prev,
-            tipo: 'colaborador',
-            perfilSistema: 'colaborador',
-            gestorId: user?.id || '',
-          }));
-        }
-      }
+    if (!isDialogOpen) {
+      resetForm();
     }
-  }, [editingUsuario, isDialogOpen, user]);
+  }, [isDialogOpen]);
+
+  useEffect(() => {
+    if (editingUsuario) {
+      setFormData({
+        nome: editingUsuario.nome || '',
+        email: editingUsuario.email || '',
+        telefone: editingUsuario.telefone || '',
+        nome_empresa: editingUsuario.nome_empresa || '',
+        tipo: (editingUsuario.tipo as TipoUsuario) || '',
+        perfilSistema: (editingUsuario.perfil_sistema as PerfilSistema) || '',
+        gestorId: editingUsuario.gestor_id || '',
+        responsavelId: editingUsuario.cs_id || '',
+      });
+    }
+  }, [editingUsuario]);
 
   const handleOpenDialog = (usuario?: Usuario) => {
     if (usuario) {
-      // Definir o usuário a ser editado ANTES de abrir o dialog
       setEditingUsuario(usuario);
-      // Preencher os dados imediatamente também
-      setFormData({
-        nome: usuario.nome || '',
-        email: usuario.email,
-        telefone: usuario.telefone || '',
-        tipo: (usuario.tipo as TipoUsuario) || '',
-        perfilSistema: (usuario.perfil_sistema as PerfilSistema) || '',
-        gestorId: usuario.gestor_id || '',
-        responsavelId: usuario.cs_id || '',
-      });
     } else {
-      // Limpar para novo usuário
       setEditingUsuario(null);
       resetForm();
     }
-    // Abrir o dialog após definir os estados
     setIsDialogOpen(true);
-  };
-
-  const handleCloseDialog = () => {
-    setIsDialogOpen(false);
-    // Resetar após um pequeno delay para evitar flicker
-    setTimeout(() => {
-      resetForm();
-    }, 200);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!user) return;
 
-    if (!user) {
-      toast({
-        title: 'Erro',
-        description: 'Usuário não autenticado.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    const perfil: PerfilSistema | null = user.perfil_sistema || null;
-    const isGestor = perfil === 'gestor' || user.tipo === 'gestor';
-
-    // Se for gestor, forçar tipo como colaborador se não estiver definido
-    if (isGestor && !formData.tipo && !formData.perfilSistema) {
-      formData.tipo = 'colaborador';
-      formData.perfilSistema = 'colaborador';
-    }
-
-    // Determinar gestor responsável e cs responsável conforme perfil
-    let gestorId: string | null = null;
-    let csId: string | null = null;
+    const perfil = user.perfil_sistema || user.tipo || null;
     let tipoFinal: TipoUsuario | null = null;
     let perfilSistemaFinal: PerfilSistema | null = null;
+    let gestorId: string | null = null;
+    let csId: string | null = null;
 
-    // Se Master/Dev está criando um perfil de sistema (master, dev, cs)
-    if (formData.perfilSistema && ['master', 'dev', 'cs'].includes(formData.perfilSistema)) {
-      perfilSistemaFinal = formData.perfilSistema as PerfilSistema;
-      tipoFinal = null; // Perfis de sistema não têm tipo
-      gestorId = null;
-      csId = null;
-    }
-    // Se for colaborador, precisamos de um gestor vinculado
-    else if (formData.tipo === 'colaborador' || formData.perfilSistema === 'colaborador') {
+    // Se for colaborador
+    if (formData.tipo === 'colaborador' || formData.perfilSistema === 'colaborador') {
       tipoFinal = 'colaborador';
       perfilSistemaFinal = 'colaborador';
       
-      if (isGestor) {
-        // Gestor só pode criar colaboradores da própria equipe
+      if (perfil === 'gestor') {
         gestorId = user.id;
-        csId = user.cs_id || null;
-      } else {
-        // Master, Dev, CS precisam escolher um gestor
-        if (!formData.gestorId) {
-          toast({
-            title: 'Atenção',
-            description: 'Selecione o gestor responsável por este colaborador.',
-            variant: 'destructive',
-          });
-          return;
-        }
+      } else if (formData.gestorId) {
         gestorId = formData.gestorId;
-
-        // Tentar herdar cs_id do gestor selecionado
-        const gestor = usuarios?.find((u) => u.id === formData.gestorId);
-        csId = gestor?.cs_id || null;
+      } else {
+        toast({
+          title: 'Atenção',
+          description: 'Selecione um gestor responsável.',
+          variant: 'destructive',
+        });
+        return;
       }
+
+      // Tentar herdar cs_id e nome_empresa do gestor selecionado
+      const gestor = usuarios?.find((u) => u.id === formData.gestorId);
+      csId = gestor?.cs_id || null;
+      // Colaborador herda a empresa do gestor (não precisa definir aqui, será feito depois)
     } 
     // Se for gestor cliente
     else if (formData.tipo === 'gestor' || formData.perfilSistema === 'gestor') {
       tipoFinal = 'gestor';
       perfilSistemaFinal = 'gestor';
       gestorId = null;
+      
+      // Validar nome da empresa (obrigatório para gestor)
+      if (!formData.nome_empresa || formData.nome_empresa.trim() === '') {
+        toast({
+          title: 'Atenção',
+          description: 'O nome da empresa é obrigatório para gestores.',
+          variant: 'destructive',
+        });
+        return;
+      }
       
       if (perfil === 'master') {
         // Master escolhe o responsável (Master ou CS)
@@ -257,82 +213,96 @@ const Equipe = () => {
         csId = user.cs_id || null;
       }
     }
-
-    // Validação: Master/Dev deve ter selecionado um perfil
-    if ((perfil === 'master' || perfil === 'dev') && !formData.perfilSistema && !formData.tipo) {
+    // Se for CS, Dev ou Master
+    else if (formData.perfilSistema === 'cs' || formData.perfilSistema === 'dev' || formData.perfilSistema === 'master') {
+      tipoFinal = null;
+      perfilSistemaFinal = formData.perfilSistema;
+      gestorId = null;
+      csId = null;
+    } else {
       toast({
         title: 'Atenção',
-        description: 'Selecione o tipo/perfil do usuário.',
+        description: 'Selecione um tipo de usuário.',
         variant: 'destructive',
       });
       return;
     }
 
-    // Validação: Se for gestor e não tiver tipo/perfil definido, definir como colaborador
-    if (isGestor && !tipoFinal && !perfilSistemaFinal) {
-      tipoFinal = 'colaborador';
-      perfilSistemaFinal = 'colaborador';
-      gestorId = user.id;
-      csId = user.cs_id || null;
+    if (!formData.email) {
+      toast({
+        title: 'Atenção',
+        description: 'O email é obrigatório.',
+        variant: 'destructive',
+      });
+      return;
     }
-
-    // Validação: Se for gestor criando colaborador, garantir que gestorId está definido
-    if (isGestor && tipoFinal === 'colaborador' && !gestorId) {
-      gestorId = user.id;
-      csId = user.cs_id || null;
-    }
-
-    const usuarioData: UsuarioInsert = {
-      nome: formData.nome || null,
-      email: formData.email,
-      telefone: formData.telefone || null,
-      tipo: tipoFinal,
-      perfil_sistema: perfilSistemaFinal,
-      gestor_id: gestorId,
-      cs_id: csId,
-    };
 
     try {
-      if (editingUsuario) {
-        const result = await updateUsuario.mutateAsync({
-          id: editingUsuario.id,
-          updates: usuarioData,
-        });
-
-        if (result) {
-          toast({
-            title: 'Sucesso!',
-            description: 'Usuário atualizado com sucesso.',
-          });
-          handleCloseDialog();
-        } else {
-          toast({
-            title: 'Erro',
-            description: 'Não foi possível atualizar o usuário.',
-            variant: 'destructive',
-          });
-        }
-      } else {
-        const result = await createUsuario.mutateAsync(usuarioData);
-
-        if (result) {
-          toast({
-            title: 'Sucesso!',
-            description: 'Usuário cadastrado com sucesso.',
-          });
-          handleCloseDialog();
-        } else {
-          toast({
-            title: 'Erro',
-            description: 'Não foi possível cadastrar o usuário. Verifique se o email já não está em uso.',
-            variant: 'destructive',
-          });
-        }
+      // Determinar nome_empresa
+      let nomeEmpresa: string | null = null;
+      
+      if (tipoFinal === 'gestor' || perfilSistemaFinal === 'gestor') {
+        // Gestor: usa o nome_empresa do formulário
+        nomeEmpresa = formData.nome_empresa || null;
+      } else if (tipoFinal === 'colaborador' || perfilSistemaFinal === 'colaborador') {
+        // Colaborador: herda do gestor
+        const gestorSelecionado = usuarios?.find((u) => u.id === gestorId);
+        nomeEmpresa = gestorSelecionado?.nome_empresa || null;
       }
-    } catch (error: any) {
+
+      const usuarioData: UsuarioInsert = {
+        nome: formData.nome || null,
+        email: formData.email,
+        telefone: formData.telefone || null,
+        nome_empresa: nomeEmpresa,
+        tipo: tipoFinal,
+        perfil_sistema: perfilSistemaFinal,
+        gestor_id: gestorId,
+        cs_id: csId,
+      };
+
+      if (editingUsuario) {
+        await updateUsuario.mutateAsync({ id: editingUsuario.id, updates: usuarioData });
+        
+        // Se for gestor e mudou a empresa, atualizar todos os colaboradores dele
+        if ((tipoFinal === 'gestor' || perfilSistemaFinal === 'gestor') && 
+            formData.nome_empresa !== editingUsuario.nome_empresa) {
+          // Buscar todos os colaboradores deste gestor (getByGestorId retorna gestor + colaboradores)
+          const todosUsuariosGestor = await usuariosService.getByGestorId(editingUsuario.id);
+          
+          // Filtrar apenas colaboradores (excluir o próprio gestor)
+          const colaboradores = todosUsuariosGestor.filter(
+            (u) => u.id !== editingUsuario.id && 
+                   (u.tipo === 'colaborador' || u.perfil_sistema === 'colaborador')
+          );
+          
+          // Atualizar a empresa de todos os colaboradores
+          for (const colaborador of colaboradores) {
+            await usuariosService.update(colaborador.id, {
+              nome_empresa: formData.nome_empresa || null,
+            });
+          }
+        }
+        
+        toast({
+          title: 'Sucesso',
+          description: 'Usuário atualizado com sucesso.',
+        });
+      } else {
+        await createUsuario.mutateAsync(usuarioData);
+        toast({
+          title: 'Sucesso',
+          description: 'Usuário criado com sucesso.',
+        });
+      }
+
+      setIsDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error('Erro ao salvar usuário:', error);
       toast({
         title: 'Erro',
-        description: error.message || 'Ocorreu um erro ao salvar o usuário.',
+        description: 'Não foi possível salvar o usuário.',
         variant: 'destructive',
       });
     }
@@ -343,111 +313,77 @@ const Equipe = () => {
     setIsDeleteDialogOpen(true);
   };
 
-  const handleConfirmDelete = async () => {
+  const handleDeleteConfirm = async () => {
     if (!usuarioToDelete) return;
 
     try {
-      const success = await deleteUsuario.mutateAsync(usuarioToDelete.id);
-
-      if (success) {
-        toast({
-          title: 'Sucesso!',
-          description: 'Usuário excluído com sucesso.',
-        });
-        setIsDeleteDialogOpen(false);
-        setUsuarioToDelete(null);
-      } else {
-        toast({
-          title: 'Erro',
-          description: 'Não foi possível excluir o usuário.',
-          variant: 'destructive',
-        });
-      }
-    } catch (error: any) {
+      await deleteUsuario.mutateAsync(usuarioToDelete.id);
+      toast({
+        title: 'Sucesso',
+        description: 'Usuário excluído com sucesso.',
+      });
+      setIsDeleteDialogOpen(false);
+      setUsuarioToDelete(null);
+    } catch (error) {
+      console.error('Erro ao excluir usuário:', error);
       toast({
         title: 'Erro',
-        description: error.message || 'Ocorreu um erro ao excluir o usuário.',
+        description: 'Não foi possível excluir o usuário.',
         variant: 'destructive',
       });
     }
   };
 
-  const getTipoLabel = (usuario: Usuario) => {
-    // Priorizar perfil_sistema se existir
-    if (usuario.perfil_sistema) {
-      switch (usuario.perfil_sistema) {
-        case 'master':
-          return 'Master';
-        case 'dev':
-          return 'Dev';
-        case 'cs':
-          return 'CS';
-        case 'gestor':
-          return 'Gestor';
-        case 'colaborador':
-          return 'Colaborador';
-        default:
-          break;
-      }
-    }
-    
-    // Se não tiver perfil_sistema, usar tipo
-    if (usuario.tipo) {
-      switch (usuario.tipo) {
-        case 'gestor':
-          return 'Gestor';
-        case 'colaborador':
-          return 'Colaborador';
-        default:
-          break;
-      }
-    }
-    
-    return 'Não definido';
+  const getTipoLabel = (usuario: Usuario): string => {
+    if (usuario.perfil_sistema === 'master') return 'Master';
+    if (usuario.perfil_sistema === 'dev') return 'Dev';
+    if (usuario.perfil_sistema === 'cs') return 'CS';
+    if (usuario.perfil_sistema === 'gestor' || usuario.tipo === 'gestor') return 'Gestor';
+    if (usuario.perfil_sistema === 'colaborador' || usuario.tipo === 'colaborador') return 'Colaborador';
+    return 'Usuário';
   };
 
   const getTipoIcon = (usuario: Usuario) => {
-    // Priorizar perfil_sistema se existir
-    if (usuario.perfil_sistema) {
-      switch (usuario.perfil_sistema) {
-        case 'master':
-          return <Crown className="w-4 h-4" />;
-        case 'dev':
-          return <Code className="w-4 h-4" />;
-        case 'cs':
-          return <UserCheck className="w-4 h-4" />;
-        case 'gestor':
-          return <Shield className="w-4 h-4" />;
-        case 'colaborador':
-          return <User className="w-4 h-4" />;
-        default:
-          break;
-      }
-    }
-    
-    // Se não tiver perfil_sistema, usar tipo
-    if (usuario.tipo) {
-      switch (usuario.tipo) {
-        case 'gestor':
-          return <Shield className="w-4 h-4" />;
-        case 'colaborador':
-          return <User className="w-4 h-4" />;
-        default:
-          break;
-      }
-    }
-    
-    return <User className="w-4 h-4" />;
+    if (usuario.perfil_sistema === 'master') return <Crown className="w-3 h-3" />;
+    if (usuario.perfil_sistema === 'dev') return <Code className="w-3 h-3" />;
+    if (usuario.perfil_sistema === 'cs') return <UserCheck className="w-3 h-3" />;
+    if (usuario.perfil_sistema === 'gestor' || usuario.tipo === 'gestor') return <Shield className="w-3 h-3" />;
+    return <User className="w-3 h-3" />;
   };
+
+  // Filtrar colaboradores disponíveis para gestores
+  const colaboradoresDisponiveis = useMemo(() => {
+    if (!usuarios || !user) return [];
+    const perfil = user.perfil_sistema || user.tipo || null;
+    
+    if (perfil === 'gestor') {
+      return usuarios.filter(u => 
+        (u.perfil_sistema === 'colaborador' || u.tipo === 'colaborador') &&
+        u.gestor_id === user.id
+      );
+    }
+    
+    return usuarios.filter(u => 
+      u.perfil_sistema === 'colaborador' || u.tipo === 'colaborador'
+    );
+  }, [usuarios, user]);
+
+  // Filtrar gestores disponíveis
+  const gestoresDisponiveis = useMemo(() => {
+    if (!usuarios) return [];
+    return usuarios.filter(u => 
+      u.perfil_sistema === 'gestor' || u.tipo === 'gestor'
+    );
+  }, [usuarios]);
 
   return (
     <AppSidebar>
-      <div className="p-6 lg:p-8">
+      <div className="p-4 lg:p-6">
         {/* Header */}
-        <header className="mb-8 animate-fade-in">
+        <header className="mb-4 animate-fade-in">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h1 className="text-3xl lg:text-4xl font-bold gradient-text mb-2">
+              <h1 className="text-2xl lg:text-3xl font-bold gradient-text mb-1">
                 {user?.perfil_sistema === 'master' ? 'Gerenciar Empresas Master' : 'Equipe'}
               </h1>
               <p className="text-muted-foreground">
@@ -494,6 +430,7 @@ const Equipe = () => {
                   <TableHead className="text-foreground">Usuário</TableHead>
                   <TableHead className="text-foreground text-center">Email</TableHead>
                   <TableHead className="text-foreground text-center hidden md:table-cell">Telefone</TableHead>
+                  <TableHead className="text-foreground text-center hidden lg:table-cell">Nome da Empresa</TableHead>
                   <TableHead className="text-foreground text-center">Tipo</TableHead>
                   <TableHead className="text-foreground text-center">Ações</TableHead>
                 </TableRow>
@@ -538,6 +475,9 @@ const Equipe = () => {
                       </TableCell>
                       <TableCell className="text-muted-foreground text-center hidden md:table-cell">
                         {usuario.telefone || '-'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-center hidden lg:table-cell">
+                        {usuario.nome_empresa || '-'}
                       </TableCell>
                       <TableCell className="text-center">
                         <span className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded-md bg-primary/20 text-primary text-xs min-w-[80px]">
@@ -592,12 +532,12 @@ const Equipe = () => {
             <form onSubmit={handleSubmit}>
               <DialogHeader>
                 <DialogTitle>
-                  {editingUsuario ? 'Editar Usuário' : (user?.perfil_sistema === 'master' ? 'Inserir Novo Usuário' : 'Novo Usuário')}
+                  {editingUsuario ? 'Editar Usuário' : 'Novo Usuário'}
                 </DialogTitle>
                 <DialogDescription>
                   {editingUsuario
                     ? 'Atualize as informações do usuário.'
-                    : 'Preencha os dados para cadastrar um novo usuário na equipe.'}
+                    : 'Preencha os dados para criar um novo usuário.'}
                 </DialogDescription>
               </DialogHeader>
 
@@ -606,11 +546,9 @@ const Equipe = () => {
                   <Label htmlFor="nome">Nome</Label>
                   <Input
                     id="nome"
-                    placeholder="Nome completo"
                     value={formData.nome}
-                    onChange={(e) =>
-                      setFormData({ ...formData, nome: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                    placeholder="Nome completo"
                   />
                 </div>
 
@@ -619,128 +557,107 @@ const Equipe = () => {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="email@exemplo.com"
                     value={formData.email}
-                    onChange={(e) =>
-                      setFormData({ ...formData, email: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="email@exemplo.com"
                     required
-                    disabled={!!editingUsuario}
                   />
-                  {editingUsuario && (
-                    <p className="text-xs text-muted-foreground">
-                      O email não pode ser alterado.
-                    </p>
-                  )}
                 </div>
 
                 <div className="grid gap-2">
                   <Label htmlFor="telefone">Telefone</Label>
                   <Input
                     id="telefone"
-                    type="tel"
-                    placeholder="(00) 00000-0000"
                     value={formData.telefone}
-                    onChange={(e) =>
-                      setFormData({ ...formData, telefone: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
+                    placeholder="(00) 00000-0000"
                   />
                 </div>
 
-                {/* Master/Dev: pode criar qualquer perfil */}
-                {(user?.perfil_sistema === 'master' || user?.perfil_sistema === 'dev') ? (
+                {/* Nome da Empresa - Apenas para Gestor */}
+                {(formData.tipo === 'gestor' || formData.perfilSistema === 'gestor') && (
                   <div className="grid gap-2">
-                    <Label htmlFor="perfilSistema">Perfil do Sistema *</Label>
+                    <Label htmlFor="nome_empresa">Nome da Empresa *</Label>
+                    <Input
+                      id="nome_empresa"
+                      value={formData.nome_empresa}
+                      onChange={(e) => setFormData({ ...formData, nome_empresa: e.target.value })}
+                      placeholder="Nome da empresa"
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Nome da empresa que este gestor representa.
+                    </p>
+                  </div>
+                )}
+
+                {/* Tipo/Perfil - Depende do perfil do usuário logado */}
+                {user?.perfil_sistema === 'master' ? (
+                  <div className="grid gap-2">
+                    <Label htmlFor="perfilSistema">Tipo de Usuário *</Label>
                     <Select
                       value={formData.perfilSistema}
-                      onValueChange={(value: PerfilSistema) => {
-                        // Limpar tipo quando selecionar perfil de sistema
-                        if (['master', 'dev', 'cs'].includes(value)) {
-                          setFormData({ ...formData, perfilSistema: value, tipo: '', gestorId: '', responsavelId: '' });
-                        } else {
-                          setFormData({ ...formData, perfilSistema: value, tipo: value as TipoUsuario, responsavelId: '' });
-                        }
+                      onValueChange={(value: string) => {
+                        setFormData({ 
+                          ...formData, 
+                          perfilSistema: value as PerfilSistema,
+                          tipo: value === 'gestor' ? 'gestor' : value === 'colaborador' ? 'colaborador' : '',
+                          responsavelId: value !== 'gestor' ? '' : formData.responsavelId,
+                        });
                       }}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione o perfil" />
+                        <SelectValue placeholder="Selecione o tipo" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="master">
-                          <div className="flex items-center gap-2">
-                            <Crown className="w-4 h-4" />
-                            Master
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="dev">
-                          <div className="flex items-center gap-2">
-                            <Code className="w-4 h-4" />
-                            Dev
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="cs">
-                          <div className="flex items-center gap-2">
-                            <UserCheck className="w-4 h-4" />
-                            CS - Sucesso do Cliente
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="gestor">
-                          <div className="flex items-center gap-2">
-                            <Shield className="w-4 h-4" />
-                            Gestor
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="colaborador">
-                          <div className="flex items-center gap-2">
-                            <User className="w-4 h-4" />
-                            Colaborador
-                          </div>
-                        </SelectItem>
+                        <SelectItem value="master">Master</SelectItem>
+                        <SelectItem value="dev">Dev</SelectItem>
+                        <SelectItem value="cs">CS</SelectItem>
+                        <SelectItem value="gestor">Gestor</SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      <strong>Master/Dev:</strong> Acesso total ao sistema.
-                      <br />
-                      <strong>CS:</strong> Gerencia gestores e colaboradores de clientes.
-                      <br />
-                      <strong>Gestor:</strong> Pode gerenciar usuários e recebe cópia de todos os relatórios.
-                      <br />
-                      <strong>Colaborador:</strong> Pode enviar áudios/transcrições e recebe apenas seus relatórios.
-                    </p>
+                  </div>
+                ) : user?.perfil_sistema === 'cs' ? (
+                  <div className="grid gap-2">
+                    <Label htmlFor="tipo">Tipo de Usuário *</Label>
+                    <Select
+                      value={formData.tipo}
+                      onValueChange={(value: string) => {
+                        setFormData({ 
+                          ...formData, 
+                          tipo: value as TipoUsuario,
+                          perfilSistema: value as PerfilSistema,
+                        });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="gestor">Gestor</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 ) : (
                   <div className="grid gap-2">
                     <Label htmlFor="tipo">Tipo de Usuário *</Label>
                     <Select
                       value={formData.tipo}
-                      onValueChange={(value: TipoUsuario) =>
-                        setFormData({ ...formData, tipo: value, perfilSistema: value as PerfilSistema })
-                      }
-                      disabled={user?.perfil_sistema === 'gestor' || user?.tipo === 'gestor'}
+                      onValueChange={(value: string) => {
+                        setFormData({ 
+                          ...formData, 
+                          tipo: value as TipoUsuario,
+                          perfilSistema: value as PerfilSistema,
+                        });
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione o tipo" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="gestor">
-                          <div className="flex items-center gap-2">
-                            <Shield className="w-4 h-4" />
-                            Gestor
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="colaborador">
-                          <div className="flex items-center gap-2">
-                            <User className="w-4 h-4" />
-                            Colaborador
-                          </div>
-                        </SelectItem>
+                        <SelectItem value="colaborador">Colaborador</SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      <strong>Gestor:</strong> Pode gerenciar usuários e recebe cópia de todos os relatórios.
-                      <br />
-                      <strong>Colaborador:</strong> Pode enviar áudios/transcrições e recebe apenas seus relatórios.
-                    </p>
                   </div>
                 )}
 
@@ -750,18 +667,14 @@ const Equipe = () => {
                     <Label htmlFor="responsavel">Responsável *</Label>
                     <Select
                       value={formData.responsavelId}
-                      onValueChange={(value: string) =>
-                        setFormData({ ...formData, responsavelId: value })
-                      }
+                      onValueChange={(value: string) => setFormData({ ...formData, responsavelId: value })}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione o responsável (Master ou CS)" />
                       </SelectTrigger>
                       <SelectContent>
                         {(todosUsuarios || [])
-                          .filter((u) => 
-                            u.perfil_sistema === 'master' || u.perfil_sistema === 'cs'
-                          )
+                          .filter((u) => u.perfil_sistema === 'master' || u.perfil_sistema === 'cs')
                           .map((responsavel) => (
                             <SelectItem key={responsavel.id} value={responsavel.id}>
                               <div className="flex items-center gap-2">
@@ -776,9 +689,7 @@ const Equipe = () => {
                           ))}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Selecione o Master ou CS responsável por este gestor.
-                    </p>
+                    <p className="text-xs text-muted-foreground">Selecione o Master ou CS responsável por este gestor.</p>
                   </div>
                 )}
 
@@ -788,33 +699,22 @@ const Equipe = () => {
                     <Label htmlFor="gestor">Gestor responsável *</Label>
                     <Select
                       value={formData.gestorId}
-                      onValueChange={(value: string) =>
-                        setFormData({ ...formData, gestorId: value })
-                      }
-                      disabled={user?.perfil_sistema === 'gestor' || user?.tipo === 'gestor'}
+                      onValueChange={(value: string) => setFormData({ ...formData, gestorId: value })}
                     >
                       <SelectTrigger>
-                        <SelectValue
-                          placeholder={
-                            user?.perfil_sistema === 'gestor' || user?.tipo === 'gestor'
-                              ? 'Você é o gestor responsável'
-                              : 'Selecione o gestor responsável'
-                          }
-                        />
+                        <SelectValue placeholder="Selecione o gestor" />
                       </SelectTrigger>
                       <SelectContent>
-                        {(usuarios || [])
-                          .filter((u) => u.tipo === 'gestor')
-                          .map((gestor) => (
-                            <SelectItem key={gestor.id} value={gestor.id}>
-                              {gestor.nome || gestor.email}
-                            </SelectItem>
-                          ))}
+                        {gestoresDisponiveis.map((gestor) => (
+                          <SelectItem key={gestor.id} value={gestor.id}>
+                            {gestor.nome || gestor.email}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      {user?.perfil_sistema === 'gestor' || user?.tipo === 'gestor'
-                        ? 'Como gestor, todos os colaboradores criados/gerenciados por você ficarão automaticamente vinculados à sua equipe.'
+                      {user?.perfil_sistema === 'master'
+                        ? 'O colaborador receberá relatórios e será considerado parte da equipe do gestor selecionado.'
                         : 'O colaborador receberá relatórios e será considerado parte da equipe do gestor selecionado.'}
                     </p>
                   </div>
@@ -825,19 +725,18 @@ const Equipe = () => {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={handleCloseDialog}
+                  onClick={() => setIsDialogOpen(false)}
                 >
                   Cancelar
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={createUsuario.isPending || updateUsuario.isPending}
-                >
-                  {createUsuario.isPending || updateUsuario.isPending
-                    ? 'Salvando...'
-                    : editingUsuario
-                    ? 'Atualizar'
-                    : 'Cadastrar'}
+                <Button type="submit" disabled={createUsuario.isPending || updateUsuario.isPending}>
+                  {createUsuario.isPending || updateUsuario.isPending ? (
+                    'Salvando...'
+                  ) : editingUsuario ? (
+                    'Salvar Alterações'
+                  ) : (
+                    'Criar Usuário'
+                  )}
                 </Button>
               </DialogFooter>
             </form>
@@ -848,13 +747,11 @@ const Equipe = () => {
         <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+              <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
               <AlertDialogDescription>
-                Tem certeza que deseja excluir o usuário{' '}
-                <strong>
-                  {usuarioToDelete?.nome || usuarioToDelete?.email}
-                </strong>
-                ? Esta ação irá apagar também todos os relatórios e dados vinculados a este usuário e não pode ser desfeita.
+                {usuarioToDelete?.perfil_sistema === 'master' || usuarioToDelete?.perfil_sistema === 'dev' || usuarioToDelete?.perfil_sistema === 'cs'
+                  ? 'Esta ação irá apagar também todos os relatórios e dados vinculados a este usuário e não pode ser desfeita.'
+                  : 'Esta ação irá apagar também todos os relatórios e dados vinculados a este usuário e não pode ser desfeita.'}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -862,10 +759,10 @@ const Equipe = () => {
                 Cancelar
               </AlertDialogCancel>
               <AlertDialogAction
-                onClick={handleConfirmDelete}
+                onClick={handleDeleteConfirm}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                {deleteUsuario.isPending ? 'Excluindo...' : 'Excluir'}
+                Excluir
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -876,4 +773,3 @@ const Equipe = () => {
 };
 
 export default Equipe;
-
