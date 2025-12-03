@@ -63,7 +63,7 @@ const AppSidebar = ({ children }: AppSidebarProps) => {
   };
 
   return (
-    <div className="flex min-h-screen w-full">
+    <div className="flex min-h-screen w-full overflow-x-hidden">
       {/* Mobile Overlay */}
       {isMobileOpen && (
         <div 
@@ -189,7 +189,7 @@ const AppSidebar = ({ children }: AppSidebarProps) => {
 
       {/* Main Content */}
       <main className={cn(
-        "flex-1 transition-all duration-300",
+        "flex-1 transition-all duration-300 overflow-x-hidden min-h-0",
         isCollapsed ? "lg:ml-20" : "lg:ml-64"
       )}>
         {/* Mobile Header */}

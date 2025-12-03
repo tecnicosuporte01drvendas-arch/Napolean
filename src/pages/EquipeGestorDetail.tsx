@@ -280,7 +280,7 @@ const EquipeGestorDetail = () => {
 
   return (
     <AppSidebar>
-      <div className="p-4 lg:p-6">
+      <div className="p-4 lg:p-6 overflow-x-hidden">
         {/* Header */}
         <header className="mb-4 animate-fade-in">
           <Button
