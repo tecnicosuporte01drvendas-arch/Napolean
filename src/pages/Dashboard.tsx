@@ -424,7 +424,7 @@ const Dashboard = () => {
 
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 3;
+  const itemsPerPage = 10;
   const totalPages = useMemo(() => {
     return Math.ceil(filteredAndSortedSalespeople.length / itemsPerPage);
   }, [filteredAndSortedSalespeople.length]);
@@ -473,10 +473,18 @@ const Dashboard = () => {
                   </span>
                 </div>
                 <h3 className="text-sm font-medium text-muted-foreground mb-1">
-                  {isColaborador ? 'Nota Média Individual' : 'Nota Média da Equipe'}
+                  {isColaborador 
+                    ? 'Nota Média Individual' 
+                    : user?.perfil_sistema === 'master' 
+                      ? 'Nota Média das Empresas' 
+                      : 'Nota Média da Equipe'}
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  {isColaborador ? 'Sua performance geral' : 'Performance geral do time'}
+                  {isColaborador 
+                    ? 'Sua performance geral' 
+                    : user?.perfil_sistema === 'master' 
+                      ? 'Performance geral' 
+                      : 'Performance geral do time'}
                 </p>
               </Card>
 
@@ -525,49 +533,52 @@ const Dashboard = () => {
               </Card>
             </div>
 
-            {/* Gráfico + lista da equipe */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Performance Chart */}
+            {/* Gráfico + lista da equipe - Um embaixo do outro */}
+            <div className="space-y-4">
+              {/* Performance Chart - Largura total */}
               <Card
-                className="glass light-shadow p-4 animate-fade-in"
+                className="glass light-shadow p-3 animate-fade-in"
                 style={{ animationDelay: '0.4s' }}
               >
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-primary animate-glow-pulse" />
                   {isColaborador ? 'Performance nas 7 Etapas Individual' : 'Performance nas 7 Etapas'}
                 </h3>
-                <ResponsiveContainer width="100%" height={275}>
-                  <RadarChart data={radarData}>
-                    <PolarGrid stroke="hsl(var(--border))" />
-                    <PolarAngleAxis
-                      dataKey="step"
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                    />
-                    <PolarRadiusAxis
-                      angle={90}
-                      domain={[0, 10]}
-                      tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                    />
-                    <Radar
-                      name={isColaborador ? "Minha Performance" : "Média da Equipe"}
-                      dataKey="score"
-                      stroke="hsl(var(--primary))"
-                      fill="hsl(var(--primary))"
-                      fillOpacity={0.3}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'hsl(var(--popover))',
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '0.5rem',
-                        color: 'hsl(var(--popover-foreground))',
-                      }}
-                    />
-                  </RadarChart>
-                </ResponsiveContainer>
+                <div className="flex justify-center">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <RadarChart data={radarData}>
+                      <PolarGrid stroke="hsl(var(--border))" />
+                      <PolarAngleAxis
+                        dataKey="step"
+                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                      />
+                      <PolarRadiusAxis
+                        angle={90}
+                        domain={[0, 10]}
+                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                      />
+                      <Radar
+                        name={isColaborador ? "Minha Performance" : "Média da Equipe"}
+                        dataKey="score"
+                        stroke="hsl(var(--primary))"
+                        fill="hsl(var(--primary))"
+                        fillOpacity={0.3}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--popover))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '0.5rem',
+                          color: 'hsl(var(--popover-foreground))',
+                          fontSize: '12px',
+                        }}
+                      />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
               </Card>
 
-              {/* Team List */}
+              {/* Team List - Largura total */}
               <Card
                 className="glass light-shadow p-4 animate-fade-in"
                 style={{ animationDelay: '0.5s' }}
@@ -590,7 +601,14 @@ const Dashboard = () => {
                           <Filter className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-64">
+                      <DropdownMenuContent 
+                        align="end" 
+                        side="bottom"
+                        sideOffset={5}
+                        alignOffset={0}
+                        className="w-64"
+                        onCloseAutoFocus={(e) => e.preventDefault()}
+                      >
                         <DropdownMenuLabel>Filtros</DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <div className="p-2">

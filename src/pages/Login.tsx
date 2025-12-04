@@ -245,11 +245,11 @@ const Login = () => {
               
               {/* Card de Sucesso - Código Enviado */}
               {showSuccessCard && (
-                <Card className="glass-strong rounded-2xl p-4 shadow-2xl mt-3 border-primary/30 bg-primary/10 animate-fade-in">
+                <Card className="glass-strong rounded-2xl p-4 shadow-2xl mt-3 border-accent/50 bg-accent/20 animate-fade-in">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3 flex-1">
-                      <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
-                        <CheckCircle2 className="w-5 h-5 text-primary" />
+                      <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center flex-shrink-0">
+                        <CheckCircle2 className="w-5 h-5 text-accent" />
                       </div>
                       <div className="flex-1">
                         <h3 className="text-base font-semibold text-foreground mb-0.5">
@@ -263,7 +263,7 @@ const Login = () => {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="flex-shrink-0 hover:bg-primary/10"
+                      className="flex-shrink-0 hover:bg-accent/10"
                       onClick={() => setShowSuccessCard(false)}
                     >
                       <X className="w-4 h-4" />

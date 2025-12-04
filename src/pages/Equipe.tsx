@@ -71,6 +71,7 @@ const Equipe = () => {
   const [usuarioToDelete, setUsuarioToDelete] = useState<Usuario | null>(null);
   const [editingUsuario, setEditingUsuario] = useState<Usuario | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [erroNomeEmpresa, setErroNomeEmpresa] = useState(false);
 
   const [formData, setFormData] = useState<{
     nome: string;
@@ -104,6 +105,7 @@ const Equipe = () => {
       gestorId: isGestor ? (user?.id || '') : '',
       responsavelId: '',
     });
+    setErroNomeEmpresa(false);
     setEditingUsuario(null);
   };
 
@@ -151,6 +153,18 @@ const Equipe = () => {
 
     // Se for colaborador
     if (formData.tipo === 'colaborador' || formData.perfilSistema === 'colaborador') {
+      // Validar nome da empresa para Master/Dev criando colaborador
+      if (isMasterOrDev && (!formData.nome_empresa || formData.nome_empresa.trim() === '')) {
+        setErroNomeEmpresa(true);
+        toast({
+          title: 'Atenção',
+          description: 'O nome da empresa é obrigatório para criar colaboradores.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      setErroNomeEmpresa(false);
+      
       tipoFinal = 'colaborador';
       perfilSistemaFinal = 'colaborador';
       
@@ -371,10 +385,20 @@ const Equipe = () => {
   // Filtrar gestores disponíveis
   const gestoresDisponiveis = useMemo(() => {
     if (!usuarios) return [];
-    return usuarios.filter(u => 
+    let gestores = usuarios.filter(u => 
       u.perfil_sistema === 'gestor' || u.tipo === 'gestor'
     );
-  }, [usuarios]);
+    
+    // Se for Master/Dev criando colaborador, filtrar gestores pela empresa selecionada
+    if (isMasterOrDev && (formData.tipo === 'colaborador' || formData.perfilSistema === 'colaborador') && formData.nome_empresa) {
+      gestores = gestores.filter(u => u.nome_empresa === formData.nome_empresa);
+    }
+    
+    return gestores;
+  }, [usuarios, isMasterOrDev, formData.tipo, formData.perfilSistema, formData.nome_empresa]);
+
+  // Verificar se é Master ou Dev
+  const isMasterOrDev = user?.perfil_sistema === 'master' || user?.perfil_sistema === 'dev';
 
   return (
     <AppSidebar>
@@ -542,13 +566,32 @@ const Equipe = () => {
               </DialogHeader>
 
               <div className="grid gap-4 py-4">
+                {/* Nome da Empresa - Sempre visível para Master e Dev (PRIMEIRO INPUT) */}
+                {isMasterOrDev && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="nome_empresa">Nome da Empresa *</Label>
+                    <Input
+                      id="nome_empresa"
+                      value={formData.nome_empresa}
+                      onChange={(e) => {
+                        setFormData({ ...formData, nome_empresa: e.target.value });
+                        setErroNomeEmpresa(false); // Limpar erro ao digitar
+                      }}
+                      placeholder="Nome da empresa"
+                      required
+                      className={erroNomeEmpresa ? "border-destructive focus-visible:ring-destructive" : ""}
+                    />
+                  </div>
+                )}
+
                 <div className="grid gap-2">
-                  <Label htmlFor="nome">Nome</Label>
+                  <Label htmlFor="nome">Nome {isMasterOrDev && '*'}</Label>
                   <Input
                     id="nome"
                     value={formData.nome}
                     onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                     placeholder="Nome completo"
+                    required={isMasterOrDev}
                   />
                 </div>
 
@@ -565,31 +608,15 @@ const Equipe = () => {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="telefone">Telefone</Label>
+                  <Label htmlFor="telefone">Telefone {isMasterOrDev && '*'}</Label>
                   <Input
                     id="telefone"
                     value={formData.telefone}
                     onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
                     placeholder="(00) 00000-0000"
+                    required={isMasterOrDev}
                   />
                 </div>
-
-                {/* Nome da Empresa - Apenas para Gestor */}
-                {(formData.tipo === 'gestor' || formData.perfilSistema === 'gestor') && (
-                  <div className="grid gap-2">
-                    <Label htmlFor="nome_empresa">Nome da Empresa *</Label>
-                    <Input
-                      id="nome_empresa"
-                      value={formData.nome_empresa}
-                      onChange={(e) => setFormData({ ...formData, nome_empresa: e.target.value })}
-                      placeholder="Nome da empresa"
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Nome da empresa que este gestor representa.
-                    </p>
-                  </div>
-                )}
 
                 {/* Tipo/Perfil - Depende do perfil do usuário logado */}
                 {user?.perfil_sistema === 'master' ? (
@@ -598,13 +625,16 @@ const Equipe = () => {
                     <Select
                       value={formData.perfilSistema}
                       onValueChange={(value: string) => {
+                        const isMasterDevCS = value === 'master' || value === 'dev' || value === 'cs';
                         setFormData({ 
                           ...formData, 
                           perfilSistema: value as PerfilSistema,
                           tipo: value === 'gestor' ? 'gestor' : value === 'colaborador' ? 'colaborador' : '',
                           responsavelId: value !== 'gestor' ? '' : formData.responsavelId,
+                          nome_empresa: isMasterDevCS ? 'Dr vendas' : formData.nome_empresa,
                         });
                       }}
+                      required
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione o tipo" />
@@ -614,6 +644,7 @@ const Equipe = () => {
                         <SelectItem value="dev">Dev</SelectItem>
                         <SelectItem value="cs">CS</SelectItem>
                         <SelectItem value="gestor">Gestor</SelectItem>
+                        <SelectItem value="colaborador">Colaborador</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -629,6 +660,7 @@ const Equipe = () => {
                           perfilSistema: value as PerfilSistema,
                         });
                       }}
+                      required
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione o tipo" />
@@ -650,6 +682,7 @@ const Equipe = () => {
                           perfilSistema: value as PerfilSistema,
                         });
                       }}
+                      required
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione o tipo" />
@@ -668,6 +701,7 @@ const Equipe = () => {
                     <Select
                       value={formData.responsavelId}
                       onValueChange={(value: string) => setFormData({ ...formData, responsavelId: value })}
+                      required
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione o responsável (Master ou CS)" />
@@ -695,29 +729,65 @@ const Equipe = () => {
 
                 {/* Seleção de Gestor responsável (apenas quando criando/alterando colaborador) */}
                 {(formData.tipo === 'colaborador' || formData.perfilSistema === 'colaborador') && (
-                  <div className="grid gap-2">
-                    <Label htmlFor="gestor">Gestor responsável *</Label>
-                    <Select
-                      value={formData.gestorId}
-                      onValueChange={(value: string) => setFormData({ ...formData, gestorId: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o gestor" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {gestoresDisponiveis.map((gestor) => (
-                          <SelectItem key={gestor.id} value={gestor.id}>
-                            {gestor.nome || gestor.email}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      {user?.perfil_sistema === 'master'
-                        ? 'O colaborador receberá relatórios e será considerado parte da equipe do gestor selecionado.'
-                        : 'O colaborador receberá relatórios e será considerado parte da equipe do gestor selecionado.'}
-                    </p>
-                  </div>
+                  <>
+                    {/* Para Master/Dev: mostrar apenas se nome_empresa estiver preenchido */}
+                    {isMasterOrDev ? (
+                      formData.nome_empresa && formData.nome_empresa.trim() !== '' && (
+                        <div className="grid gap-2">
+                          <Label htmlFor="gestor">Gestor responsável *</Label>
+                          <Select
+                            value={formData.gestorId}
+                            onValueChange={(value: string) => setFormData({ ...formData, gestorId: value })}
+                            required
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o gestor" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {gestoresDisponiveis.length > 0 ? (
+                                gestoresDisponiveis.map((gestor) => (
+                                  <SelectItem key={gestor.id} value={gestor.id}>
+                                    {gestor.nome || gestor.email}
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                                  Nenhum gestor encontrado para esta empresa.
+                                </div>
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            O colaborador receberá relatórios e será considerado parte da equipe do gestor selecionado.
+                          </p>
+                        </div>
+                      )
+                    ) : (
+                      /* Para outras roles: mostrar normalmente */
+                      <div className="grid gap-2">
+                        <Label htmlFor="gestor">Gestor responsável *</Label>
+                        <Select
+                          value={formData.gestorId}
+                          onValueChange={(value: string) => setFormData({ ...formData, gestorId: value })}
+                          required
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o gestor" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {gestoresDisponiveis.map((gestor) => (
+                              <SelectItem key={gestor.id} value={gestor.id}>
+                                {gestor.nome || gestor.email}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          O colaborador receberá relatórios e será considerado parte da equipe do gestor selecionado.
+                        </p>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -773,3 +843,4 @@ const Equipe = () => {
 };
 
 export default Equipe;
+
