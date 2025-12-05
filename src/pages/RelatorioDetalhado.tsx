@@ -40,7 +40,13 @@ const RelatorioDetalhado = () => {
         <div className="min-h-screen flex items-center justify-center">
           <Card className="glass p-8 text-center max-w-md">
             <p className="text-muted-foreground mb-4">Relatório não encontrado.</p>
-            <Button onClick={() => navigate('/dashboard')}>
+            <Button onClick={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                navigate('/dashboard');
+              }
+            }}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               Voltar
             </Button>

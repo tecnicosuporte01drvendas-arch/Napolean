@@ -44,6 +44,14 @@ import { useUsuarioById, useRelatorios, useRelatoriosByUsuario } from '@/hooks/u
 import { usuariosService } from '@/lib/supabaseServices';
 import { useQuery } from '@tanstack/react-query';
 import type { Usuario, Relatorio } from '@/lib/database.types';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 const EquipeGestorDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -150,12 +158,25 @@ const EquipeGestorDetail = () => {
           ? validScores.reduce((sum, r) => sum + (r.nota_media || 0), 0) / validScores.length
           : 0;
 
+      // Calcular médias das etapas
+      const calcularMediaEtapa = (notaFn: (r: Relatorio) => number | null) => {
+        const notas = relatoriosColab.map(notaFn).filter((n): n is number => n !== null);
+        return notas.length > 0 ? notas.reduce((sum, n) => sum + n, 0) / notas.length : null;
+      };
+
       return {
         id: colaborador.id,
         name: colaborador.nome || colaborador.email,
         email: colaborador.email,
         averageScore,
         totalTranscriptions: relatoriosColab.length,
+        etapa1: calcularMediaEtapa(r => r.nota_boas_vindas),
+        etapa2: calcularMediaEtapa(r => r.nota_identificacao),
+        etapa3: calcularMediaEtapa(r => r.nota_historia),
+        etapa4: calcularMediaEtapa(r => r.nota_pilares),
+        etapa5: calcularMediaEtapa(r => r.nota_objecoes),
+        etapa6: calcularMediaEtapa(r => r.nota_impacto),
+        etapa7: calcularMediaEtapa(r => r.nota_proposta),
       };
     }).sort((a, b) => b.averageScore - a.averageScore);
 
@@ -221,6 +242,10 @@ const EquipeGestorDetail = () => {
   // Estados para filtro e ordenação dos colaboradores
   const [searchTermColaboradores, setSearchTermColaboradores] = useState('');
   const [sortOrderColaboradores, setSortOrderColaboradores] = useState<'desc' | 'asc'>('desc');
+  
+  // Paginação para colaboradores
+  const [currentPageColaboradores, setCurrentPageColaboradores] = useState(1);
+  const itemsPerPageColaboradores = 10;
 
   // Filtrar e ordenar colaboradores
   const filteredAndSortedColaboradores = useMemo(() => {
@@ -245,11 +270,28 @@ const EquipeGestorDetail = () => {
     return sorted;
   }, [colaboradoresList, searchTermColaboradores, sortOrderColaboradores]);
 
+  // Paginação dos colaboradores
+  const totalPagesColaboradores = useMemo(() => {
+    return Math.ceil(filteredAndSortedColaboradores.length / itemsPerPageColaboradores);
+  }, [filteredAndSortedColaboradores.length]);
+
+  const paginatedColaboradores = useMemo(() => {
+    if (!filteredAndSortedColaboradores || filteredAndSortedColaboradores.length === 0) return [];
+    const startIndex = (currentPageColaboradores - 1) * itemsPerPageColaboradores;
+    const endIndex = startIndex + itemsPerPageColaboradores;
+    return filteredAndSortedColaboradores.slice(startIndex, endIndex);
+  }, [filteredAndSortedColaboradores, currentPageColaboradores, itemsPerPageColaboradores]);
+
+  // Resetar página quando filtro mudar
+  useEffect(() => {
+    setCurrentPageColaboradores(1);
+  }, [searchTermColaboradores, sortOrderColaboradores]);
+
   const handleAction = (type: 'transcript' | 'relatorio', relatorio: Relatorio) => {
     if (type === 'transcript' && relatorio.url_arquivo) {
       window.open(relatorio.url_arquivo, '_blank');
     } else if (type === 'relatorio' && relatorio.texto_relatorio_completo) {
-      navigate(`/relatorio/${relatorio.id}`);
+      navigate(`/relatorio/${relatorio.id}/completo`);
     }
   };
 
@@ -269,8 +311,14 @@ const EquipeGestorDetail = () => {
         <div className="p-6 lg:p-8">
           <Card className="glass p-8 text-center">
             <p className="text-muted-foreground mb-4">Gestor não encontrado</p>
-            <Button onClick={() => navigate('/dashboard')}>
-              Voltar ao Dashboard
+            <Button onClick={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                navigate('/dashboard');
+              }
+            }}>
+              Voltar
             </Button>
           </Card>
         </div>
@@ -285,11 +333,17 @@ const EquipeGestorDetail = () => {
         <header className="mb-4 animate-fade-in">
           <Button
             variant="ghost"
-            onClick={() => navigate('/dashboard')}
+            onClick={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                navigate('/dashboard');
+              }
+            }}
             className="mb-2 hover:bg-primary/10"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Voltar ao Dashboard
+            Voltar
           </Button>
         </header>
 
@@ -352,45 +406,49 @@ const EquipeGestorDetail = () => {
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          {/* Performance Chart */}
-          <Card className="glass light-shadow p-4 animate-fade-in">
-            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+        {/* Gráfico + Lista de Colaboradores - Empilhados verticalmente */}
+        <div className="space-y-4 mb-4">
+          {/* Performance Chart - Largura total */}
+          <Card className="glass light-shadow p-3 animate-fade-in">
+            <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-primary animate-glow-pulse" />
               Performance nas 7 Etapas
             </h3>
-            <ResponsiveContainer width="100%" height={275}>
-              <RadarChart data={radarData}>
-                <PolarGrid stroke="hsl(var(--border))" />
-                <PolarAngleAxis
-                  dataKey="step"
-                  tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                />
-                <PolarRadiusAxis
-                  angle={90}
-                  domain={[0, 10]}
-                  tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                />
-                <Radar
-                  name="Média da Equipe"
-                  dataKey="score"
-                  stroke="hsl(var(--primary))"
-                  fill="hsl(var(--primary))"
-                  fillOpacity={0.3}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--popover))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '0.5rem',
-                    color: 'hsl(var(--popover-foreground))',
-                  }}
-                />
-              </RadarChart>
-            </ResponsiveContainer>
+            <div className="flex justify-center">
+              <ResponsiveContainer width="100%" height={220}>
+                <RadarChart data={radarData}>
+                  <PolarGrid stroke="hsl(var(--border))" />
+                  <PolarAngleAxis
+                    dataKey="step"
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                  />
+                  <PolarRadiusAxis
+                    angle={90}
+                    domain={[0, 10]}
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                  />
+                  <Radar
+                    name="Média da Equipe"
+                    dataKey="score"
+                    stroke="hsl(var(--primary))"
+                    fill="hsl(var(--primary))"
+                    fillOpacity={0.3}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--popover))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '0.5rem',
+                      color: 'hsl(var(--popover-foreground))',
+                      fontSize: '12px',
+                    }}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
           </Card>
 
-          {/* Colaboradores List */}
+          {/* Colaboradores List - Largura total */}
           <Card className="glass light-shadow p-4 animate-fade-in">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -435,54 +493,159 @@ const EquipeGestorDetail = () => {
               </div>
             </div>
 
-            <div className="space-y-2">
-              {filteredAndSortedColaboradores.length > 0 ? (
-                filteredAndSortedColaboradores.map((colaborador, index) => (
-                  <div
-                    key={colaborador.id}
-                    className="glass p-3 rounded-xl hover:bg-primary/5 dark:hover:bg-white/5 transition-all cursor-pointer group"
-                    onClick={() => navigate(`/colaborador/${colaborador.id}`)}
-                    style={{ animationDelay: `${0.3 + index * 0.05}s` }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar className="w-10 h-10 border-2 border-primary/50">
-                        <AvatarFallback className="bg-primary/20 text-primary text-sm">
-                          {colaborador.name
-                            .split(' ')
-                            .map((n) => n[0])
-                            .join('')}
-                        </AvatarFallback>
-                      </Avatar>
-
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-foreground truncate text-sm">{colaborador.name}</h4>
-                        <p className="text-xs text-muted-foreground truncate">Colaborador</p>
-                      </div>
-
-                      <div className="text-right">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl font-bold text-primary">
-                            {colaborador.averageScore.toFixed(1)}
-                          </span>
-                          <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {colaborador.totalTranscriptions} análises
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  Nenhum colaborador vinculado ainda.
-                </div>
-              )}
+            <div className="min-h-[240px] overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-border hover:bg-transparent">
+                    <TableHead className="text-foreground px-2 text-sm max-w-[200px]">Nome</TableHead>
+                    <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 1</TableHead>
+                    <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 2</TableHead>
+                    <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 3</TableHead>
+                    <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 4</TableHead>
+                    <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 5</TableHead>
+                    <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 6</TableHead>
+                    <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 7</TableHead>
+                    <TableHead className="text-center text-foreground px-1 text-sm">Nota Final</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedColaboradores.length > 0 ? (
+                    paginatedColaboradores.map((colaborador) => (
+                      <TableRow
+                        key={colaborador.id}
+                        className="border-border hover:bg-primary/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                        onClick={() => navigate(`/colaborador/${colaborador.id}`)}
+                      >
+                        <TableCell className="px-2">
+                          <div className="font-semibold text-foreground text-sm">
+                            {colaborador.name}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center px-0.5">
+                          {(colaborador as any).etapa1 !== null && (colaborador as any).etapa1 !== undefined ? (
+                            <span className="text-sm font-medium">
+                              {(colaborador as any).etapa1.toFixed(1)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center px-0.5">
+                          {(colaborador as any).etapa2 !== null && (colaborador as any).etapa2 !== undefined ? (
+                            <span className="text-sm font-medium">
+                              {(colaborador as any).etapa2.toFixed(1)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center px-0.5">
+                          {(colaborador as any).etapa3 !== null && (colaborador as any).etapa3 !== undefined ? (
+                            <span className="text-sm font-medium">
+                              {(colaborador as any).etapa3.toFixed(1)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center px-0.5">
+                          {(colaborador as any).etapa4 !== null && (colaborador as any).etapa4 !== undefined ? (
+                            <span className="text-sm font-medium">
+                              {(colaborador as any).etapa4.toFixed(1)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center px-0.5">
+                          {(colaborador as any).etapa5 !== null && (colaborador as any).etapa5 !== undefined ? (
+                            <span className="text-sm font-medium">
+                              {(colaborador as any).etapa5.toFixed(1)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center px-0.5">
+                          {(colaborador as any).etapa6 !== null && (colaborador as any).etapa6 !== undefined ? (
+                            <span className="text-sm font-medium">
+                              {(colaborador as any).etapa6.toFixed(1)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center px-0.5">
+                          {(colaborador as any).etapa7 !== null && (colaborador as any).etapa7 !== undefined ? (
+                            <span className="text-sm font-medium">
+                              {(colaborador as any).etapa7.toFixed(1)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center px-1">
+                          {colaborador.averageScore > 0 ? (
+                            <span className="text-base font-bold text-primary">
+                              {colaborador.averageScore.toFixed(1)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">-</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                        Nenhum colaborador vinculado ainda.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
             </div>
+
+            {/* Paginação */}
+            {filteredAndSortedColaboradores.length > itemsPerPageColaboradores && (
+              <Pagination className="mt-2">
+                <PaginationContent className="gap-0.5">
+                  <PaginationItem>
+                    <PaginationLink
+                      onClick={() => setCurrentPageColaboradores(prev => Math.max(1, prev - 1))}
+                      className={`${currentPageColaboradores === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} h-7 w-7 text-xs`}
+                    >
+                      <ChevronLeft className="h-3 w-3" />
+                    </PaginationLink>
+                  </PaginationItem>
+                  
+                  {Array.from({ length: totalPagesColaboradores }, (_, i) => i + 1).map((page) => (
+                    <PaginationItem key={page}>
+                      <PaginationLink
+                        onClick={() => setCurrentPageColaboradores(page)}
+                        isActive={currentPageColaboradores === page}
+                        className="cursor-pointer h-7 w-7 text-xs"
+                      >
+                        {page}
+                      </PaginationLink>
+                    </PaginationItem>
+                  ))}
+                  
+                  <PaginationItem>
+                    <PaginationLink
+                      onClick={() => setCurrentPageColaboradores(prev => Math.min(totalPagesColaboradores, prev + 1))}
+                      className={`${currentPageColaboradores === totalPagesColaboradores ? 'pointer-events-none opacity-50' : 'cursor-pointer'} h-7 w-7 text-xs`}
+                    >
+                      <ChevronRight className="h-3 w-3" />
+                    </PaginationLink>
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            )}
           </Card>
         </div>
 
-        {/* Histórico de Relatórios do Gestor - Card separado */}
+        {/* Histórico de Relatórios do Gestor - Embaixo dos colaboradores */}
         <Card className="glass light-shadow p-3 animate-fade-in">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -530,86 +693,155 @@ const EquipeGestorDetail = () => {
 
           {filteredRelatorios && filteredRelatorios.length > 0 ? (
             <>
-              <div className="space-y-1.5 min-h-[260px]">
-                {paginatedRelatorios.map((relatorio, index) => (
-                  <div
-                    key={relatorio.id}
-                    onClick={() => navigate(`/relatorio/${relatorio.id}`)}
-                    className="glass p-2.5 rounded-xl hover:bg-primary/5 dark:hover:bg-white/5 transition-all cursor-pointer group border border-border/50"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        {/* Data */}
-                        <div className="flex-shrink-0">
-                          <div className="text-xs text-muted-foreground mb-0.5">Data</div>
-                          <div className="text-sm font-medium text-foreground">
-                            {new Date(relatorio.criado_em).toLocaleDateString('pt-BR', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              year: 'numeric',
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Nome do Arquivo */}
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs text-muted-foreground mb-0.5">Nome</div>
-                          <div className="text-sm font-medium text-foreground truncate" title={relatorio.nome_arquivo || ''}>
-                            {relatorio.nome_arquivo || 'Sem nome'}
-                          </div>
-                        </div>
-
-                        {/* Nota Final */}
-                        <div className="flex-shrink-0 text-right">
-                          <div className="text-xs text-muted-foreground mb-0.5">Nota Final</div>
-                          {relatorio.nota_media !== null ? (
-                            <div className="text-base font-bold text-primary">
-                              {relatorio.nota_media.toFixed(1)}
+              <div className="min-h-[260px] overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-border hover:bg-transparent">
+                      <TableHead className="text-center text-foreground px-1 text-sm max-w-[60px]">Data</TableHead>
+                      <TableHead className="text-foreground px-2 text-sm max-w-[120px]">Nome do arquivo</TableHead>
+                      <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 1</TableHead>
+                      <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 2</TableHead>
+                      <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 3</TableHead>
+                      <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 4</TableHead>
+                      <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 5</TableHead>
+                      <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 6</TableHead>
+                      <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 7</TableHead>
+                      <TableHead className="text-center text-foreground px-1 text-sm">Nota final</TableHead>
+                      <TableHead className="text-center text-foreground px-0.5 text-sm">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedRelatorios.map((relatorio) => {
+                      const data = new Date(relatorio.criado_em);
+                      const diaMes = data.toLocaleDateString('pt-BR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                      });
+                      const ano = data.getFullYear();
+                      
+                      return (
+                        <TableRow
+                          key={relatorio.id}
+                          className="border-border hover:bg-primary/5 dark:hover:bg-white/5 transition-colors"
+                        >
+                          <TableCell className="font-medium px-1 text-sm max-w-[60px]">
+                            <div className="flex flex-col items-center">
+                              <span>{diaMes}</span>
+                              <span>{ano}</span>
                             </div>
-                          ) : (
-                            <div className="text-xs text-muted-foreground">-</div>
-                          )}
-                        </div>
-
-                        {/* Ações - Dropdown */}
-                        <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground px-2 text-sm max-w-[120px]">
+                            <div className="truncate" title={relatorio.nome_arquivo || ''}>
+                              {relatorio.nome_arquivo || 'Sem nome'}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center px-0.5">
+                            {relatorio.nota_boas_vindas !== null ? (
+                              <span className="text-sm font-medium">
+                                {relatorio.nota_boas_vindas.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center px-0.5">
+                            {relatorio.nota_identificacao !== null ? (
+                              <span className="text-sm font-medium">
+                                {relatorio.nota_identificacao.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center px-0.5">
+                            {relatorio.nota_historia !== null ? (
+                              <span className="text-sm font-medium">
+                                {relatorio.nota_historia.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center px-0.5">
+                            {relatorio.nota_pilares !== null ? (
+                              <span className="text-sm font-medium">
+                                {relatorio.nota_pilares.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center px-0.5">
+                            {relatorio.nota_objecoes !== null ? (
+                              <span className="text-sm font-medium">
+                                {relatorio.nota_objecoes.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center px-0.5">
+                            {relatorio.nota_impacto !== null ? (
+                              <span className="text-sm font-medium">
+                                {relatorio.nota_impacto.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center px-0.5">
+                            {relatorio.nota_proposta !== null ? (
+                              <span className="text-sm font-medium">
+                                {relatorio.nota_proposta.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center px-1">
+                            {relatorio.nota_media !== null ? (
+                              <span className="text-base font-bold text-primary">
+                                {relatorio.nota_media.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center px-0.5">
+                            <div className="flex flex-col items-center justify-center gap-1.5">
                               <Button
-                                variant="ghost"
+                                variant="outline"
                                 size="sm"
-                                className="h-6 w-6 p-0 hover:bg-primary/10"
-                              >
-                                <MoreVertical className="h-3 w-3" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => handleAction('relatorio', relatorio)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAction('relatorio', relatorio);
+                                }}
                                 disabled={!relatorio.texto_relatorio_completo}
-                                className="gap-2 cursor-pointer"
+                                className="text-sm h-7 px-2 gap-1.5 w-full"
                               >
-                                <FileSearch className="w-4 h-4" />
-                                Relatório Detalhado
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => handleAction('transcript', relatorio)}
+                                <FileSearch className="w-3 h-3" />
+                                Relatório
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAction('transcript', relatorio);
+                                }}
                                 disabled={!relatorio.url_arquivo}
-                                className="gap-2 cursor-pointer"
+                                className="text-sm h-7 px-2 gap-1.5 w-full"
                               >
-                                <FileText className="w-4 h-4" />
-                                Transcrição Original
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-
-                      {/* Seta indicando que é clicável */}
-                      <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
-                    </div>
-                  </div>
-                ))}
+                                <FileText className="w-3 h-3" />
+                                Transcrição
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               </div>
               
                 {/* Paginação */}

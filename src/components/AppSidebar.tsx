@@ -41,6 +41,7 @@ const AppSidebar = ({ children }: AppSidebarProps) => {
     user?.perfil_sistema === 'cs';
 
   const isMaster = user?.perfil_sistema === 'master';
+  const isCS = user?.perfil_sistema === 'cs';
 
   const navItems = isColaborador
     ? [
@@ -55,7 +56,7 @@ const AppSidebar = ({ children }: AppSidebarProps) => {
       ]
     : [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-        { icon: Users, label: isMaster ? 'Gerenciar Empresas' : 'Equipe', path: '/equipe' },
+        { icon: Users, label: isMaster || isCS ? 'Gerenciar Empresas' : 'Equipe', path: '/equipe' },
       ];
 
   const handleLogout = () => {

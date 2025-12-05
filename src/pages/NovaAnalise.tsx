@@ -126,11 +126,17 @@ const NovaAnalise = () => {
         <header className="mb-4 animate-fade-in">
           <Button
             variant="ghost"
-            onClick={() => navigate('/dashboard')}
+            onClick={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                navigate('/dashboard');
+              }
+            }}
             className="mb-2 hover:bg-primary/10"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Voltar ao Dashboard
+            Voltar
           </Button>
           <h1 className="text-2xl lg:text-3xl font-bold gradient-text mb-1">
             Nova Análise
@@ -227,7 +233,7 @@ const NovaAnalise = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => navigate(`/relatorio/${relatorio.id}`)}
+                          onClick={() => navigate(`/relatorio/${relatorio.id}/completo`)}
                         >
                           Ver Relatório
                         </Button>

@@ -46,6 +46,14 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -125,8 +133,16 @@ const Dashboard = () => {
     // Master / Dev / CS / Gestor: usam escopo calculado pelo hook
     let usuarios = (usuariosEscopo || []).length > 0 ? (usuariosEscopo as Usuario[]) : [user];
     
-    // Master: mostrar TODOS os gestores na lista da equipe
-    if (perfil === 'master') {
+    // Gestor: mostrar apenas colaboradores vinculados a ele
+    if (perfil === 'gestor') {
+      usuarios = usuarios.filter(u => 
+        (u.tipo === 'colaborador' || u.perfil_sistema === 'colaborador') &&
+        u.gestor_id === user.id
+      );
+    }
+    
+    // Master e CS: mostrar TODOS os gestores na lista da equipe
+    if (perfil === 'master' || perfil === 'cs') {
       usuarios = usuarios.filter(u => 
         u.perfil_sistema === 'gestor' || u.tipo === 'gestor'
       );
@@ -160,8 +176,8 @@ const Dashboard = () => {
       };
     }
 
-    // Para Master: agrupar por empresas únicas
-    if (user.perfil_sistema === 'master') {
+    // Para Master e CS: agrupar por empresas únicas
+    if (user.perfil_sistema === 'master' || user.perfil_sistema === 'cs') {
       // Buscar todos os gestores com nome_empresa
       const gestoresComEmpresa = teamUsers.filter(
         (u) => (u.perfil_sistema === 'gestor' || u.tipo === 'gestor') && u.nome_empresa
@@ -210,6 +226,12 @@ const Dashboard = () => {
             ? validScores.reduce((sum, r) => sum + (r.nota_media || 0), 0) / validScores.length
             : 0;
 
+        // Calcular médias das etapas
+        const calcularMediaEtapa = (notaFn: (r: Relatorio) => number | null) => {
+          const notas = relatoriosEmpresa.map(notaFn).filter((n): n is number => n !== null);
+          return notas.length > 0 ? notas.reduce((sum, n) => sum + n, 0) / notas.length : null;
+        };
+
         return {
           id: empresa.nome_empresa, // Usar nome_empresa como ID para navegação
           name: empresa.nome_empresa,
@@ -217,10 +239,17 @@ const Dashboard = () => {
           role: 'Empresa',
           averageScore,
           totalTranscriptions: relatoriosEmpresa.length,
+          etapa1: calcularMediaEtapa(r => r.nota_boas_vindas),
+          etapa2: calcularMediaEtapa(r => r.nota_identificacao),
+          etapa3: calcularMediaEtapa(r => r.nota_historia),
+          etapa4: calcularMediaEtapa(r => r.nota_pilares),
+          etapa5: calcularMediaEtapa(r => r.nota_objecoes),
+          etapa6: calcularMediaEtapa(r => r.nota_impacto),
+          etapa7: calcularMediaEtapa(r => r.nota_proposta),
         };
       }).sort((a, b) => b.averageScore - a.averageScore);
 
-      // Calcular stats gerais (todos os relatórios do sistema para Master)
+      // Calcular stats gerais (todos os relatórios do sistema para Master e CS)
       const totalTranscriptions = (relatorios as Relatorio[]).length;
       const validScores = (relatorios as Relatorio[]).filter((r) => r.nota_media !== null);
       const avgScore =
@@ -285,9 +314,10 @@ const Dashboard = () => {
       (r) => r.id_usuario && teamUserIds.has(r.id_usuario),
     );
 
-    // Para colaborador: usar apenas relatórios do próprio usuário para stats individuais
+    // Para colaborador e gestor: usar apenas relatórios do próprio usuário para stats individuais
     const isColaboradorUser = user?.perfil_sistema === 'colaborador' || user?.tipo === 'colaborador';
-    const relatoriosParaStats = isColaboradorUser
+    const isGestorUser = user?.perfil_sistema === 'gestor' || user?.tipo === 'gestor';
+    const relatoriosParaStats = (isColaboradorUser || isGestorUser)
       ? (relatorios as Relatorio[]).filter((r) => r.id_usuario === user.id)
       : teamRelatorios;
 
@@ -586,11 +616,11 @@ const Dashboard = () => {
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold flex items-center gap-2">
                     <Users className="w-5 h-5 text-accent" />
-                    {user?.perfil_sistema === 'master' ? 'Empresa' : 'Equipe'}
+                    {user?.perfil_sistema === 'master' || user?.perfil_sistema === 'cs' ? 'Empresa' : 'Equipe'}
                   </h3>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">
-                      {filteredAndSortedSalespeople.length} {user?.perfil_sistema === 'master' 
+                      {filteredAndSortedSalespeople.length} {(user?.perfil_sistema === 'master' || user?.perfil_sistema === 'cs')
                         ? (filteredAndSortedSalespeople.length === 1 ? 'empresa' : 'empresas')
                         : (filteredAndSortedSalespeople.length === 1 ? 'membro' : 'membros') + ' da equipe'
                       }
@@ -615,7 +645,7 @@ const Dashboard = () => {
                           <div className="relative mb-3">
                             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
-                              placeholder={user?.perfil_sistema === 'master' ? "Buscar empresa..." : "Buscar..."}
+                              placeholder={(user?.perfil_sistema === 'master' || user?.perfil_sistema === 'cs') ? "Buscar empresa..." : "Buscar..."}
                               value={searchTerm}
                               onChange={(e) => setSearchTerm(e.target.value)}
                               className="pl-8"
@@ -636,72 +666,128 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                 <div className="space-y-2 mb-4 min-h-[240px]">
-                   {paginatedSalespeople.map((person, index) => {
-                     // Determinar rota baseado no perfil do usuário
-                     const getRoute = () => {
-                       // Se for Master, navegar para página da empresa
-                       if (user?.perfil_sistema === 'master' && person.role === 'Empresa') {
-                         return `/empresa/${encodeURIComponent(person.name)}`;
-                       }
-                       
-                       const usuario = teamUsers.find(u => u.id === person.id);
-                       if (!usuario) return `/salesperson/${person.id}`;
-                       
-                       const perfil = usuario.perfil_sistema || usuario.tipo;
-                       if (perfil === 'cs') return `/equipe/cs/${person.id}`;
-                       if (perfil === 'gestor') return `/equipe/gestor/${person.id}`;
-                       if (perfil === 'colaborador') return `/colaborador/${person.id}`;
-                       return `/salesperson/${person.id}`;
-                     };
-                     
-                     return (
-                     <div
-                       key={person.id}
-                       className={`glass p-3 rounded-xl transition-all group ${
-                         isColaborador 
-                           ? '' // Sem hover e cursor para colaborador
-                           : 'hover:bg-primary/5 dark:hover:bg-white/5 cursor-pointer'
-                       }`}
-                       onClick={isColaborador ? undefined : () => navigate(getRoute())}
-                       style={{ animationDelay: `${0.6 + index * 0.1}s` }}
-                     >
-                       <div className="flex items-center gap-3">
-                         <Avatar className="w-10 h-10 border-2 border-primary/50">
-                           <AvatarFallback className="bg-primary/20 text-primary text-sm">
-                             {person.name
-                               .split(' ')
-                               .map((n) => n[0])
-                               .join('')}
-                           </AvatarFallback>
-                         </Avatar>
+                 <div className="min-h-[240px] overflow-x-auto">
+                   <Table>
+                     <TableHeader>
+                       <TableRow className="border-border hover:bg-transparent">
+                         <TableHead className="text-foreground px-2 text-sm max-w-[200px]">Nome da Empresa</TableHead>
+                         <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 1</TableHead>
+                         <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 2</TableHead>
+                         <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 3</TableHead>
+                         <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 4</TableHead>
+                         <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 5</TableHead>
+                         <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 6</TableHead>
+                         <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 7</TableHead>
+                         <TableHead className="text-center text-foreground px-1 text-sm">Nota Final</TableHead>
+                       </TableRow>
+                     </TableHeader>
+                     <TableBody>
+                       {paginatedSalespeople.map((person) => {
+                         const getRoute = () => {
+                           if ((user?.perfil_sistema === 'master' || user?.perfil_sistema === 'cs') && person.role === 'Empresa') {
+                             return `/empresa/${encodeURIComponent(person.name)}`;
+                           }
+                           
+                           const usuario = teamUsers.find(u => u.id === person.id);
+                           if (!usuario) return `/salesperson/${person.id}`;
+                           
+                           const perfil = usuario.perfil_sistema || usuario.tipo;
+                           if (perfil === 'cs') return `/equipe/cs/${person.id}`;
+                           if (perfil === 'gestor') return `/equipe/gestor/${person.id}`;
+                           if (perfil === 'colaborador') return `/colaborador/${person.id}`;
+                           return `/salesperson/${person.id}`;
+                         };
 
-                         <div className="flex-1 min-w-0">
-                           <h4 className="font-semibold text-foreground truncate text-sm">
-                             {person.name}
-                           </h4>
-                           <p className="text-xs text-muted-foreground truncate">
-                             {person.role}
-                           </p>
-                         </div>
-
-                         <div className="text-right">
-                           <div className="flex items-center gap-2">
-                             <span className="text-xl font-bold text-primary">
-                               {person.averageScore.toFixed(1)}
-                             </span>
-                             {!isColaborador && (
-                               <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                             )}
-                           </div>
-                           <p className="text-xs text-muted-foreground">
-                             {person.totalTranscriptions} análises
-                           </p>
-                         </div>
-                       </div>
-                     </div>
-                     );
-                   })}
+                         return (
+                           <TableRow
+                             key={person.id}
+                             className={`border-border hover:bg-primary/5 dark:hover:bg-white/5 transition-colors ${
+                               isColaborador ? '' : 'cursor-pointer'
+                             }`}
+                             onClick={isColaborador ? undefined : () => navigate(getRoute())}
+                           >
+                             <TableCell className="px-2">
+                               <div className="font-semibold text-foreground text-sm">
+                                 {person.name}
+                               </div>
+                             </TableCell>
+                             <TableCell className="text-center px-0.5">
+                               {(person as any).etapa1 !== null && (person as any).etapa1 !== undefined ? (
+                                 <span className="text-sm font-medium">
+                                   {(person as any).etapa1.toFixed(1)}
+                                 </span>
+                               ) : (
+                                 <span className="text-muted-foreground text-sm">-</span>
+                               )}
+                             </TableCell>
+                             <TableCell className="text-center px-0.5">
+                               {(person as any).etapa2 !== null && (person as any).etapa2 !== undefined ? (
+                                 <span className="text-sm font-medium">
+                                   {(person as any).etapa2.toFixed(1)}
+                                 </span>
+                               ) : (
+                                 <span className="text-muted-foreground text-sm">-</span>
+                               )}
+                             </TableCell>
+                             <TableCell className="text-center px-0.5">
+                               {(person as any).etapa3 !== null && (person as any).etapa3 !== undefined ? (
+                                 <span className="text-sm font-medium">
+                                   {(person as any).etapa3.toFixed(1)}
+                                 </span>
+                               ) : (
+                                 <span className="text-muted-foreground text-sm">-</span>
+                               )}
+                             </TableCell>
+                             <TableCell className="text-center px-0.5">
+                               {(person as any).etapa4 !== null && (person as any).etapa4 !== undefined ? (
+                                 <span className="text-sm font-medium">
+                                   {(person as any).etapa4.toFixed(1)}
+                                 </span>
+                               ) : (
+                                 <span className="text-muted-foreground text-sm">-</span>
+                               )}
+                             </TableCell>
+                             <TableCell className="text-center px-0.5">
+                               {(person as any).etapa5 !== null && (person as any).etapa5 !== undefined ? (
+                                 <span className="text-sm font-medium">
+                                   {(person as any).etapa5.toFixed(1)}
+                                 </span>
+                               ) : (
+                                 <span className="text-muted-foreground text-sm">-</span>
+                               )}
+                             </TableCell>
+                             <TableCell className="text-center px-0.5">
+                               {(person as any).etapa6 !== null && (person as any).etapa6 !== undefined ? (
+                                 <span className="text-sm font-medium">
+                                   {(person as any).etapa6.toFixed(1)}
+                                 </span>
+                               ) : (
+                                 <span className="text-muted-foreground text-sm">-</span>
+                               )}
+                             </TableCell>
+                             <TableCell className="text-center px-0.5">
+                               {(person as any).etapa7 !== null && (person as any).etapa7 !== undefined ? (
+                                 <span className="text-sm font-medium">
+                                   {(person as any).etapa7.toFixed(1)}
+                                 </span>
+                               ) : (
+                                 <span className="text-muted-foreground text-sm">-</span>
+                               )}
+                             </TableCell>
+                             <TableCell className="text-center px-1">
+                               {person.averageScore > 0 ? (
+                                 <span className="text-base font-bold text-primary">
+                                   {person.averageScore.toFixed(1)}
+                                 </span>
+                               ) : (
+                                 <span className="text-muted-foreground text-sm">-</span>
+                               )}
+                             </TableCell>
+                           </TableRow>
+                         );
+                       })}
+                     </TableBody>
+                   </Table>
                  </div>
 
                  {/* Paginação */}

@@ -233,8 +233,14 @@ const EmpresaDetail = () => {
         <div className="p-6 lg:p-8">
           <Card className="glass p-8 text-center">
             <p className="text-muted-foreground mb-4">Empresa não encontrada</p>
-            <Button onClick={() => navigate('/dashboard')}>
-              Voltar ao Dashboard
+            <Button onClick={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                navigate('/dashboard');
+              }
+            }}>
+              Voltar
             </Button>
           </Card>
         </div>
@@ -249,11 +255,17 @@ const EmpresaDetail = () => {
         <header className="mb-4 animate-fade-in">
           <Button
             variant="ghost"
-            onClick={() => navigate('/dashboard')}
+            onClick={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                navigate('/dashboard');
+              }
+            }}
             className="mb-2 hover:bg-primary/10"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Voltar ao Dashboard
+            Voltar
           </Button>
         </header>
 

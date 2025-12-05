@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit, Trash2, UserPlus, Shield, User, Search, Crown, Code, UserCheck } from 'lucide-react';
+import { Plus, Edit, Trash2, UserPlus, Shield, User, Search, Crown, Code, UserCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -43,20 +43,36 @@ import { usuariosService } from '@/lib/supabaseServices';
 import type { Usuario, UsuarioInsert, TipoUsuario, PerfilSistema } from '@/lib/database.types';
 import AppSidebar from '@/components/AppSidebar';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+} from '@/components/ui/pagination';
 
 const Equipe = () => {
   const { toast } = useToast();
   const { user } = useAuth();
+  const isMasterOrDev = user?.perfil_sistema === 'master' || user?.perfil_sistema === 'dev';
+  const isMasterOrDevOrCS = user?.perfil_sistema === 'master' || user?.perfil_sistema === 'dev' || user?.perfil_sistema === 'cs';
+  const isCS = user?.perfil_sistema === 'cs';
   const { data: usuariosEscopo, isLoading } = useUsuariosPorEscopo(user || null);
   const { data: todosUsuarios } = useUsuarios();
   
-  // Master: mostrar todas as roles exceto colaboradores
+  // Master e CS: mostrar todos os usuários (mas CS não vê master/dev/cs)
   const usuarios = useMemo(() => {
     if (!user || !usuariosEscopo) return usuariosEscopo;
     const perfil = user.perfil_sistema || user.tipo || null;
     if (perfil === 'master') {
+      // Master vê todos os usuários, incluindo colaboradores
+      return usuariosEscopo;
+    }
+    if (perfil === 'cs') {
+      // CS vê todos os usuários, exceto master/dev/cs
       return usuariosEscopo.filter(u => 
-        u.perfil_sistema !== 'colaborador' && u.tipo !== 'colaborador'
+        u.perfil_sistema !== 'master' && 
+        u.perfil_sistema !== 'dev' && 
+        u.perfil_sistema !== 'cs'
       );
     }
     return usuariosEscopo;
@@ -72,6 +88,8 @@ const Equipe = () => {
   const [editingUsuario, setEditingUsuario] = useState<Usuario | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [erroNomeEmpresa, setErroNomeEmpresa] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const [formData, setFormData] = useState<{
     nome: string;
@@ -153,8 +171,8 @@ const Equipe = () => {
 
     // Se for colaborador
     if (formData.tipo === 'colaborador' || formData.perfilSistema === 'colaborador') {
-      // Validar nome da empresa para Master/Dev criando colaborador
-      if (isMasterOrDev && (!formData.nome_empresa || formData.nome_empresa.trim() === '')) {
+      // Validar nome da empresa para Master/Dev/CS criando colaborador
+      if (isMasterOrDevOrCS && (!formData.nome_empresa || formData.nome_empresa.trim() === '')) {
         setErroNomeEmpresa(true);
         toast({
           title: 'Atenção',
@@ -203,24 +221,8 @@ const Equipe = () => {
       }
       
       if (perfil === 'master') {
-        // Master escolhe o responsável (Master ou CS)
-        if (!formData.responsavelId) {
-          toast({
-            title: 'Atenção',
-            description: 'Selecione o responsável (Master ou CS) por este gestor.',
-            variant: 'destructive',
-          });
-          return;
-        }
-        
-        // Verificar se o responsável é CS ou Master
-        const responsavel = todosUsuarios?.find((u) => u.id === formData.responsavelId);
-        if (responsavel?.perfil_sistema === 'cs') {
-          csId = responsavel.id;
-        } else {
-          // Se for Master, não tem cs_id
-          csId = null;
-        }
+        // Gestores são vinculados pela empresa, não mais por responsável específico
+        csId = null;
       } else if (perfil === 'cs') {
         csId = user.id;
       } else {
@@ -365,6 +367,32 @@ const Equipe = () => {
     return <User className="w-3 h-3" />;
   };
 
+  // Verificar se o usuário pode editar/excluir outro usuário
+  const canEditOrDelete = (usuario: Usuario): boolean => {
+    const protectedEmail = 'sergioricardorocharj@gmail.com';
+    
+    // Se o usuário sendo visualizado é o protegido
+    if (usuario.email.toLowerCase() === protectedEmail.toLowerCase()) {
+      // Apenas o próprio usuário com role master pode editar/excluir a si mesmo
+      const isProtectedUser = user?.email?.toLowerCase() === protectedEmail.toLowerCase();
+      const isMaster = user?.perfil_sistema === 'master';
+      return isProtectedUser && isMaster;
+    }
+    
+    // CS não pode editar/excluir master/dev/cs
+    if (isCS) {
+      const isRestrictedRole = usuario.perfil_sistema === 'master' || 
+                               usuario.perfil_sistema === 'dev' || 
+                               usuario.perfil_sistema === 'cs';
+      if (isRestrictedRole) {
+        return false;
+      }
+    }
+    
+    // Para outros usuários, permitir edição/exclusão normalmente
+    return true;
+  };
+
   // Filtrar colaboradores disponíveis para gestores
   const colaboradoresDisponiveis = useMemo(() => {
     if (!usuarios || !user) return [];
@@ -389,16 +417,50 @@ const Equipe = () => {
       u.perfil_sistema === 'gestor' || u.tipo === 'gestor'
     );
     
-    // Se for Master/Dev criando colaborador, filtrar gestores pela empresa selecionada
-    if (isMasterOrDev && (formData.tipo === 'colaborador' || formData.perfilSistema === 'colaborador') && formData.nome_empresa) {
+    // Se for Master/Dev/CS criando colaborador, filtrar gestores pela empresa selecionada
+    if (isMasterOrDevOrCS && (formData.tipo === 'colaborador' || formData.perfilSistema === 'colaborador') && formData.nome_empresa) {
       gestores = gestores.filter(u => u.nome_empresa === formData.nome_empresa);
     }
     
     return gestores;
-  }, [usuarios, isMasterOrDev, formData.tipo, formData.perfilSistema, formData.nome_empresa]);
+  }, [usuarios, isMasterOrDevOrCS, formData.tipo, formData.perfilSistema, formData.nome_empresa]);
 
-  // Verificar se é Master ou Dev
-  const isMasterOrDev = user?.perfil_sistema === 'master' || user?.perfil_sistema === 'dev';
+  // Filtrar usuários por termo de busca
+  const filteredUsuarios = useMemo(() => {
+    if (!usuarios) return [];
+    
+    return usuarios.filter((usuario) => {
+      // Filtrar o próprio usuário
+      if (usuario.id === user?.id) return false;
+      
+      // Filtrar por termo de busca
+      if (searchTerm.trim() === '') return true;
+      
+      const term = searchTerm.toLowerCase();
+      const nome = (usuario.nome || '').toLowerCase();
+      const email = (usuario.email || '').toLowerCase();
+      const tipo = getTipoLabel(usuario).toLowerCase();
+      
+      return nome.includes(term) || email.includes(term) || tipo.includes(term);
+    });
+  }, [usuarios, user, searchTerm]);
+
+  // Paginação
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredUsuarios.length / itemsPerPage);
+  }, [filteredUsuarios.length]);
+
+  const paginatedUsuarios = useMemo(() => {
+    if (!filteredUsuarios || filteredUsuarios.length === 0) return [];
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredUsuarios.slice(startIndex, endIndex);
+  }, [filteredUsuarios, currentPage, itemsPerPage]);
+
+  // Resetar página quando filtro mudar
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   return (
     <AppSidebar>
@@ -408,11 +470,15 @@ const Equipe = () => {
           <div className="flex items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl lg:text-3xl font-bold gradient-text mb-1">
-                {user?.perfil_sistema === 'master' ? 'Gerenciar Empresas Master' : 'Equipe'}
+                {user?.perfil_sistema === 'master' 
+                  ? 'Gerenciar Empresas Master' 
+                  : user?.perfil_sistema === 'cs'
+                  ? 'Gerenciar Empresas CS'
+                  : 'Equipe'}
               </h1>
               <p className="text-muted-foreground">
-                {user?.perfil_sistema === 'master' 
-                  ? 'Gerencie os usuarios Gestores/ Devs/ Equipe CS'
+                {user?.perfil_sistema === 'master' || user?.perfil_sistema === 'cs'
+                  ? 'Gerencie todos os usuarios'
                   : 'Gerencie os usuários da sua equipe'
                 }
               </p>
@@ -460,22 +526,7 @@ const Equipe = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {usuarios
-                  ?.filter((usuario) => {
-                    // Filtrar o próprio usuário
-                    if (usuario.id === user?.id) return false;
-                    
-                    // Filtrar por termo de busca
-                    if (searchTerm.trim() === '') return true;
-                    
-                    const term = searchTerm.toLowerCase();
-                    const nome = (usuario.nome || '').toLowerCase();
-                    const email = (usuario.email || '').toLowerCase();
-                    const tipo = getTipoLabel(usuario).toLowerCase();
-                    
-                    return nome.includes(term) || email.includes(term) || tipo.includes(term);
-                  })
-                  .map((usuario) => (
+                {paginatedUsuarios.map((usuario) => (
                     <TableRow
                       key={usuario.id}
                       className="border-border hover:bg-primary/5 dark:hover:bg-white/5 transition-colors"
@@ -516,6 +567,7 @@ const Equipe = () => {
                             size="sm"
                             className="gap-2"
                             onClick={() => handleOpenDialog(usuario)}
+                            disabled={!canEditOrDelete(usuario)}
                           >
                             <Edit className="w-4 h-4" />
                             Editar
@@ -525,6 +577,7 @@ const Equipe = () => {
                             size="sm"
                             className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
                             onClick={() => handleDeleteClick(usuario)}
+                            disabled={!canEditOrDelete(usuario)}
                           >
                             <Trash2 className="w-4 h-4" />
                             Excluir
@@ -532,9 +585,48 @@ const Equipe = () => {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                ))}
               </TableBody>
             </Table>
+            
+            {/* Paginação */}
+            {filteredUsuarios.length > itemsPerPage && (
+              <div className="mt-3">
+                <Pagination>
+                  <PaginationContent className="gap-0.5">
+                    <PaginationItem>
+                      <PaginationLink
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        className={`${currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} h-7 w-7 text-xs`}
+                      >
+                        <ChevronLeft className="h-3 w-3" />
+                      </PaginationLink>
+                    </PaginationItem>
+                    
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                      <PaginationItem key={page}>
+                        <PaginationLink
+                          onClick={() => setCurrentPage(page)}
+                          isActive={currentPage === page}
+                          className="cursor-pointer h-7 w-7 text-xs"
+                        >
+                          {page}
+                        </PaginationLink>
+                      </PaginationItem>
+                    ))}
+                    
+                    <PaginationItem>
+                      <PaginationLink
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        className={`${currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} h-7 w-7 text-xs`}
+                      >
+                        <ChevronRight className="h-3 w-3" />
+                      </PaginationLink>
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
           </Card>
         ) : (
           <Card className="glass light-shadow p-12 text-center">
@@ -566,8 +658,8 @@ const Equipe = () => {
               </DialogHeader>
 
               <div className="grid gap-4 py-4">
-                {/* Nome da Empresa - Sempre visível para Master e Dev (PRIMEIRO INPUT) */}
-                {isMasterOrDev && (
+                {/* Nome da Empresa - Sempre visível para Master, Dev e CS (PRIMEIRO INPUT) */}
+                {isMasterOrDevOrCS && (
                   <div className="grid gap-2">
                     <Label htmlFor="nome_empresa">Nome da Empresa *</Label>
                     <Input
@@ -585,7 +677,7 @@ const Equipe = () => {
                 )}
 
                 <div className="grid gap-2">
-                  <Label htmlFor="nome">Nome {isMasterOrDev && '*'}</Label>
+                  <Label htmlFor="nome">Nome {isMasterOrDevOrCS && '*'}</Label>
                   <Input
                     id="nome"
                     value={formData.nome}
@@ -608,7 +700,7 @@ const Equipe = () => {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="telefone">Telefone {isMasterOrDev && '*'}</Label>
+                  <Label htmlFor="telefone">Telefone {isMasterOrDevOrCS && '*'}</Label>
                   <Input
                     id="telefone"
                     value={formData.telefone}
@@ -630,7 +722,6 @@ const Equipe = () => {
                           ...formData, 
                           perfilSistema: value as PerfilSistema,
                           tipo: value === 'gestor' ? 'gestor' : value === 'colaborador' ? 'colaborador' : '',
-                          responsavelId: value !== 'gestor' ? '' : formData.responsavelId,
                           nome_empresa: isMasterDevCS ? 'Dr vendas' : formData.nome_empresa,
                         });
                       }}
@@ -667,6 +758,7 @@ const Equipe = () => {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="gestor">Gestor</SelectItem>
+                        <SelectItem value="colaborador">Colaborador</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -694,44 +786,11 @@ const Equipe = () => {
                   </div>
                 )}
 
-                {/* Seleção de Responsável (apenas quando Master criar/editar gestor) */}
-                {user?.perfil_sistema === 'master' && (formData.tipo === 'gestor' || formData.perfilSistema === 'gestor') && (
-                  <div className="grid gap-2">
-                    <Label htmlFor="responsavel">Responsável *</Label>
-                    <Select
-                      value={formData.responsavelId}
-                      onValueChange={(value: string) => setFormData({ ...formData, responsavelId: value })}
-                      required
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o responsável (Master ou CS)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(todosUsuarios || [])
-                          .filter((u) => u.perfil_sistema === 'master' || u.perfil_sistema === 'cs')
-                          .map((responsavel) => (
-                            <SelectItem key={responsavel.id} value={responsavel.id}>
-                              <div className="flex items-center gap-2">
-                                {responsavel.perfil_sistema === 'master' ? (
-                                  <Crown className="w-4 h-4" />
-                                ) : (
-                                  <UserCheck className="w-4 h-4" />
-                                )}
-                                {responsavel.nome || responsavel.email} ({responsavel.perfil_sistema === 'master' ? 'Master' : 'CS'})
-                              </div>
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">Selecione o Master ou CS responsável por este gestor.</p>
-                  </div>
-                )}
-
                 {/* Seleção de Gestor responsável (apenas quando criando/alterando colaborador) */}
                 {(formData.tipo === 'colaborador' || formData.perfilSistema === 'colaborador') && (
                   <>
-                    {/* Para Master/Dev: mostrar apenas se nome_empresa estiver preenchido */}
-                    {isMasterOrDev ? (
+                    {/* Para Master/Dev/CS: mostrar apenas se nome_empresa estiver preenchido */}
+                    {isMasterOrDevOrCS ? (
                       formData.nome_empresa && formData.nome_empresa.trim() !== '' && (
                         <div className="grid gap-2">
                           <Label htmlFor="gestor">Gestor responsável *</Label>

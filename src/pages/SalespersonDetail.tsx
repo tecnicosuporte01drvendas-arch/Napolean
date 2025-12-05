@@ -41,8 +41,14 @@ const SalespersonDetail = () => {
         <div className="min-h-screen flex items-center justify-center">
           <Card className="glass p-8 text-center">
             <p className="text-muted-foreground mb-4">Vendedor não encontrado</p>
-            <Button onClick={() => navigate('/dashboard')}>
-              Voltar ao Dashboard
+            <Button onClick={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                navigate('/dashboard');
+              }
+            }}>
+              Voltar
             </Button>
           </Card>
         </div>
@@ -61,11 +67,17 @@ const SalespersonDetail = () => {
         <header className="mb-8 animate-fade-in">
           <Button 
             variant="ghost" 
-            onClick={() => navigate('/dashboard')}
+            onClick={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                navigate('/dashboard');
+              }
+            }}
             className="mb-4 hover:bg-primary/10"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Voltar ao Dashboard
+            Voltar
           </Button>
 
           <div className="glass-strong light-shadow p-6 rounded-2xl">

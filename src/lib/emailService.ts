@@ -93,7 +93,7 @@ export const emailService = {
               </div>
               
               <div class="warning">
-                <strong>⚠️ Importante:</strong> Este código expira em 15 minutos. Não compartilhe este código com ninguém.
+                <strong>Importante:</strong> Este código expira em 15 minutos. Não compartilhe este código com ninguém.
               </div>
               
               <p>Se você não solicitou este código, ignore este email.</p>
