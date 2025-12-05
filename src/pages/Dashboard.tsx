@@ -314,12 +314,13 @@ const Dashboard = () => {
       (r) => r.id_usuario && teamUserIds.has(r.id_usuario),
     );
 
-    // Para colaborador e gestor: usar apenas relatórios do próprio usuário para stats individuais
+    // Para colaborador: usar apenas relatórios do próprio usuário para stats individuais
+    // Para gestor: usar relatórios dos colaboradores (teamRelatorios) para ver média da equipe
     const isColaboradorUser = user?.perfil_sistema === 'colaborador' || user?.tipo === 'colaborador';
     const isGestorUser = user?.perfil_sistema === 'gestor' || user?.tipo === 'gestor';
-    const relatoriosParaStats = (isColaboradorUser || isGestorUser)
+    const relatoriosParaStats = isColaboradorUser
       ? (relatorios as Relatorio[]).filter((r) => r.id_usuario === user.id)
-      : teamRelatorios;
+      : teamRelatorios; // Para gestor e outros, usar teamRelatorios (inclui colaboradores)
 
     const salespeople = teamUsers
       .map((u) => {
@@ -330,6 +331,12 @@ const Dashboard = () => {
             ? validScores.reduce((sum, r) => sum + (r.nota_media || 0), 0) /
               validScores.length
             : 0;
+
+        // Calcular médias das etapas
+        const calcularMediaEtapa = (notaFn: (r: Relatorio) => number | null) => {
+          const notas = relatoriosUsuario.map(notaFn).filter((n): n is number => n !== null);
+          return notas.length > 0 ? notas.reduce((sum, n) => sum + n, 0) / notas.length : null;
+        };
 
         return {
           id: u.id,
@@ -343,6 +350,13 @@ const Dashboard = () => {
               : u.perfil_sistema || 'Usuário',
           averageScore,
           totalTranscriptions: relatoriosUsuario.length,
+          etapa1: calcularMediaEtapa(r => r.nota_boas_vindas),
+          etapa2: calcularMediaEtapa(r => r.nota_identificacao),
+          etapa3: calcularMediaEtapa(r => r.nota_historia),
+          etapa4: calcularMediaEtapa(r => r.nota_pilares),
+          etapa5: calcularMediaEtapa(r => r.nota_objecoes),
+          etapa6: calcularMediaEtapa(r => r.nota_impacto),
+          etapa7: calcularMediaEtapa(r => r.nota_proposta),
         };
       })
       .sort((a, b) => b.averageScore - a.averageScore); // Ordenar por maior nota primeiro
@@ -382,7 +396,7 @@ const Dashboard = () => {
     const radarData: Array<{ step: string; score: number }> = steps.map((step) => {
       const valores = relatoriosParaStats
         .map((r) => r[step.key as keyof Relatorio] as number | null)
-        .filter((v): v is number => v !== null);
+        .filter((v): v is number => v !== null && v !== undefined && !isNaN(v));
 
       const media =
         valores.length > 0
@@ -667,10 +681,12 @@ const Dashboard = () => {
                 </div>
 
                  <div className="min-h-[240px] overflow-x-auto">
-                   <Table>
+                   <Table className="table-fixed">
                      <TableHeader>
                        <TableRow className="border-border hover:bg-transparent">
-                         <TableHead className="text-foreground px-2 text-sm max-w-[200px]">Nome da Empresa</TableHead>
+                         <TableHead className={`text-foreground pl-2 pr-0 text-sm ${isColaborador ? 'w-[45px]' : 'w-[200px]'}`}>
+                           {isColaborador ? 'Nome do colaborador' : 'Nome da Empresa'}
+                         </TableHead>
                          <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 1</TableHead>
                          <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 2</TableHead>
                          <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 3</TableHead>
@@ -706,8 +722,8 @@ const Dashboard = () => {
                              }`}
                              onClick={isColaborador ? undefined : () => navigate(getRoute())}
                            >
-                             <TableCell className="px-2">
-                               <div className="font-semibold text-foreground text-sm">
+                             <TableCell className={`pl-2 pr-0 ${isColaborador ? 'w-[45px]' : 'w-[200px]'}`}>
+                               <div className="font-semibold text-foreground text-sm truncate" title={person.name}>
                                  {person.name}
                                </div>
                              </TableCell>

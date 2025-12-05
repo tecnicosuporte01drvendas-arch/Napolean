@@ -209,7 +209,7 @@ const EquipeGestorDetail = () => {
     const radarData: Array<{ step: string; score: number }> = steps.map((step) => {
       const valores = teamRelatorios
         .map((r) => r[step.key as keyof Relatorio] as number | null)
-        .filter((v): v is number => v !== null);
+        .filter((v): v is number => v !== null && v !== undefined && !isNaN(v));
 
       const media =
         valores.length > 0
@@ -494,10 +494,10 @@ const EquipeGestorDetail = () => {
             </div>
 
             <div className="min-h-[240px] overflow-x-auto">
-              <Table>
+              <Table className="table-fixed">
                 <TableHeader>
                   <TableRow className="border-border hover:bg-transparent">
-                    <TableHead className="text-foreground px-2 text-sm max-w-[200px]">Nome</TableHead>
+                    <TableHead className="text-foreground pl-2 pr-0 text-sm w-[45px]">Nome</TableHead>
                     <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 1</TableHead>
                     <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 2</TableHead>
                     <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 3</TableHead>
@@ -516,8 +516,8 @@ const EquipeGestorDetail = () => {
                         className="border-border hover:bg-primary/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
                         onClick={() => navigate(`/colaborador/${colaborador.id}`)}
                       >
-                        <TableCell className="px-2">
-                          <div className="font-semibold text-foreground text-sm">
+                        <TableCell className="pl-2 pr-0 w-[45px]">
+                          <div className="font-semibold text-foreground text-sm truncate" title={colaborador.name}>
                             {colaborador.name}
                           </div>
                         </TableCell>

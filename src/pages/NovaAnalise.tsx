@@ -28,7 +28,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { Upload, FileText, Calendar, ArrowLeft } from 'lucide-react';
+import { Upload, FileText, Calendar, ArrowLeft, FileSearch } from 'lucide-react';
 import AppSidebar from '@/components/AppSidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRelatoriosByUsuario, useCreateRelatorio } from '@/hooks/useSupabase';
@@ -56,12 +56,34 @@ const NovaAnalise = () => {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
+      // Se for gestor e houver colaboradores, abre o dialog
+      // Caso contrário, apenas define o arquivo (não envia automaticamente)
       if (isGestor && colaboradores && colaboradores.length > 0) {
         setIsDialogOpen(true);
-      } else {
-        handleUpload();
       }
+      // Removido o handleUpload() automático - usuário deve clicar em "Enviar"
     }
+  };
+
+  const handleCancelFile = () => {
+    setSelectedFile(null);
+    setSelectedColaboradorId('');
+    // Limpar o input de arquivo
+    const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+    if (fileInput) fileInput.value = '';
+  };
+
+  // Função para converter arquivo para base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const base64String = (reader.result as string).split(',')[1]; // Remove o prefixo data:application/pdf;base64,
+        resolve(base64String);
+      };
+      reader.onerror = (error) => reject(error);
+    });
   };
 
   const handleUpload = async () => {
@@ -80,11 +102,94 @@ const NovaAnalise = () => {
       }
 
       // Criar registro do relatório
-      await createRelatorio.mutateAsync({
+      const novoRelatorio = await createRelatorio.mutateAsync({
         id_usuario: usuarioId,
         nome_arquivo: selectedFile.name,
         url_arquivo: uploadResult.url,
       });
+
+      if (!novoRelatorio) {
+        throw new Error('Erro ao criar registro do relatório');
+      }
+
+      // Buscar destinatários
+      let destinatarios: Array<{
+        id: string;
+        email: string;
+        nome: string | null;
+        telefone: string | null;
+      }> = [];
+
+      if (isGestor) {
+        // Se for gestor, incluir colaboradores + o próprio gestor
+        if (colaboradores && colaboradores.length > 0) {
+          destinatarios = colaboradores.map((colab) => ({
+            id: colab.id,
+            email: colab.email,
+            nome: colab.nome,
+            telefone: colab.telefone || null,
+          }));
+        }
+        // Adicionar o próprio gestor
+        destinatarios.push({
+          id: user.id,
+          email: user.email,
+          nome: user.nome,
+          telefone: user.telefone || null,
+        });
+      } else {
+        // Se for colaborador, apenas o próprio usuário
+        destinatarios.push({
+          id: user.id,
+          email: user.email,
+          nome: user.nome,
+          telefone: user.telefone || null,
+        });
+      }
+
+      // Converter arquivo para base64
+      const arquivoBase64 = await fileToBase64(selectedFile);
+
+      // Montar payload do webhook
+      const webhookPayload = {
+        arquivo: {
+          nome: selectedFile.name,
+          tipo: selectedFile.type,
+          tamanho: selectedFile.size,
+          base64: arquivoBase64,
+        },
+        usuario: {
+          id: usuarioId,
+          email: user.email,
+          nome: user.nome || null,
+          telefone: user.telefone || null,
+          tipo: user.tipo || user.perfil_sistema || 'colaborador',
+        },
+        destinatarios: destinatarios,
+        relatorio_id: novoRelatorio.id,
+        url_arquivo: uploadResult.url,
+        data_envio: new Date().toISOString(),
+      };
+
+      // Chamar webhook do n8n
+      const webhookUrl = 'https://napolean-n8n.kpkckc.easypanel.host/webhook/Napolean';
+      try {
+        const webhookResponse = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(webhookPayload),
+        });
+
+        if (!webhookResponse.ok) {
+          console.error('Erro ao chamar webhook do n8n:', await webhookResponse.text());
+          // Não falhar o upload se o webhook falhar
+        }
+      } catch (webhookError) {
+        console.error('Erro ao chamar webhook do n8n:', webhookError);
+        // Não falhar o upload se o webhook falhar
+      }
 
       toast({
         title: 'Sucesso!',
@@ -165,22 +270,48 @@ const NovaAnalise = () => {
                 accept=".txt,.doc,.docx,.pdf"
                 onChange={handleFileSelect}
                 className="hidden"
-                disabled={isUploading}
+                disabled={isUploading || !!selectedFile}
               />
               <Button
                 asChild
-                disabled={isUploading}
-                className="bg-gradient-to-r from-primary to-accent hover:opacity-90"
+                disabled={isUploading || !!selectedFile}
+                className={`bg-gradient-to-r from-primary to-accent ${
+                  (isUploading || !!selectedFile) 
+                    ? 'opacity-50 hover:opacity-50' 
+                    : 'hover:opacity-90'
+                }`}
               >
                 <span>
-                  {isUploading ? 'Enviando...' : 'Selecionar Arquivo'}
+                  Selecionar Arquivo
                 </span>
               </Button>
             </Label>
             {selectedFile && (
-              <p className="text-sm text-muted-foreground mt-4">
-                Arquivo selecionado: {selectedFile.name}
-              </p>
+              <div className="mt-4 flex flex-col items-center gap-3">
+                <p className="text-sm text-muted-foreground">
+                  Arquivo selecionado: {selectedFile.name}
+                </p>
+                {/* Se for gestor e tiver colaboradores, os botões aparecem após selecionar no dialog */}
+                {/* Se não for gestor ou não tiver colaboradores, mostra os botões direto */}
+                {(!isGestor || (isGestor && !colaboradores?.length) || (isGestor && selectedColaboradorId)) ? (
+                  <div className="flex items-center gap-3">
+                    <Button
+                      onClick={handleCancelFile}
+                      disabled={isUploading}
+                      variant="outline"
+                    >
+                      Cancelar Arquivo
+                    </Button>
+                    <Button
+                      onClick={handleUpload}
+                      disabled={isUploading}
+                      className="bg-gradient-to-r from-primary to-accent hover:opacity-90"
+                    >
+                      {isUploading ? 'Enviando...' : 'Enviar Arquivo'}
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
             )}
           </div>
         </Card>
@@ -203,43 +334,191 @@ const NovaAnalise = () => {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome do Arquivo</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
+                  <TableRow className="border-border hover:bg-transparent">
+                    {(isColaborador || isGestor) ? (
+                      <>
+                        <TableHead className="text-center text-foreground px-1 text-sm max-w-[60px]">Data</TableHead>
+                        <TableHead className="text-foreground px-2 text-sm max-w-[120px]">Nome do arquivo</TableHead>
+                        <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 1</TableHead>
+                        <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 2</TableHead>
+                        <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 3</TableHead>
+                        <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 4</TableHead>
+                        <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 5</TableHead>
+                        <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 6</TableHead>
+                        <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 7</TableHead>
+                        <TableHead className="text-center text-foreground px-1 text-sm">Nota final</TableHead>
+                        <TableHead className="text-center text-foreground px-0.5 text-sm">Ações</TableHead>
+                      </>
+                    ) : (
+                      <>
+                        <TableHead>Nome do Arquivo</TableHead>
+                        <TableHead>Data</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {relatoriosOrdenados.map((relatorio) => (
-                    <TableRow key={relatorio.id}>
-                      <TableCell className="font-medium">
-                        {relatorio.nome_arquivo || 'Sem nome'}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Calendar className="w-4 h-4" />
-                          {relatorio.criado_em
-                            ? new Date(relatorio.criado_em).toLocaleDateString('pt-BR', {
-                                day: '2-digit',
-                                month: '2-digit',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                            : '-'}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => navigate(`/relatorio/${relatorio.id}/completo`)}
+                  {relatoriosOrdenados.map((relatorio) => {
+                    if (isColaborador || isGestor) {
+                      const data = new Date(relatorio.criado_em || 0);
+                      const diaMes = data.toLocaleDateString('pt-BR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                      });
+                      const ano = data.getFullYear();
+                      
+                      return (
+                        <TableRow
+                          key={relatorio.id}
+                          className="border-border hover:bg-primary/5 dark:hover:bg-white/5 transition-colors"
                         >
-                          Ver Relatório
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                          <TableCell className="font-medium px-1 text-sm max-w-[60px]">
+                            <div className="flex flex-col items-center">
+                              <span>{diaMes}</span>
+                              <span>{ano}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground px-2 text-sm max-w-[120px]">
+                            <div className="truncate" title={relatorio.nome_arquivo || ''}>
+                              {relatorio.nome_arquivo || 'Sem nome'}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center px-0.5">
+                            {relatorio.nota_boas_vindas !== null ? (
+                              <span className="text-sm font-medium">
+                                {relatorio.nota_boas_vindas.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center px-0.5">
+                            {relatorio.nota_identificacao !== null ? (
+                              <span className="text-sm font-medium">
+                                {relatorio.nota_identificacao.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center px-0.5">
+                            {relatorio.nota_historia !== null ? (
+                              <span className="text-sm font-medium">
+                                {relatorio.nota_historia.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center px-0.5">
+                            {relatorio.nota_pilares !== null ? (
+                              <span className="text-sm font-medium">
+                                {relatorio.nota_pilares.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center px-0.5">
+                            {relatorio.nota_objecoes !== null ? (
+                              <span className="text-sm font-medium">
+                                {relatorio.nota_objecoes.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center px-0.5">
+                            {relatorio.nota_impacto !== null ? (
+                              <span className="text-sm font-medium">
+                                {relatorio.nota_impacto.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center px-0.5">
+                            {relatorio.nota_proposta !== null ? (
+                              <span className="text-sm font-medium">
+                                {relatorio.nota_proposta.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center px-1">
+                            {relatorio.nota_media !== null ? (
+                              <span className="text-base font-bold text-primary">
+                                {relatorio.nota_media.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center px-0.5">
+                            <div className="flex flex-col items-center justify-center gap-1.5">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => navigate(`/relatorio/${relatorio.id}/completo`)}
+                                disabled={!relatorio.texto_relatorio_completo}
+                                className="text-sm h-7 px-2 gap-1.5 w-full"
+                              >
+                                <FileSearch className="w-3 h-3" />
+                                Relatório
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  if (relatorio.url_arquivo) {
+                                    window.open(relatorio.url_arquivo, '_blank');
+                                  }
+                                }}
+                                disabled={!relatorio.url_arquivo}
+                                className="text-sm h-7 px-2 gap-1.5 w-full"
+                              >
+                                <FileText className="w-3 h-3" />
+                                Transcrição
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    } else {
+                      return (
+                        <TableRow key={relatorio.id}>
+                          <TableCell className="font-medium">
+                            {relatorio.nome_arquivo || 'Sem nome'}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Calendar className="w-4 h-4" />
+                              {relatorio.criado_em
+                                ? new Date(relatorio.criado_em).toLocaleDateString('pt-BR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })
+                                : '-'}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => navigate(`/relatorio/${relatorio.id}/completo`)}
+                            >
+                              Ver Relatório
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -286,15 +565,21 @@ const NovaAnalise = () => {
                   setIsDialogOpen(false);
                   setSelectedFile(null);
                   setSelectedColaboradorId('');
+                  // Limpar o input de arquivo
+                  const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+                  if (fileInput) fileInput.value = '';
                 }}
               >
                 Cancelar
               </Button>
               <Button
-                onClick={handleUpload}
-                disabled={!selectedColaboradorId || isUploading}
+                onClick={() => {
+                  setIsDialogOpen(false);
+                  // Os botões aparecerão abaixo do arquivo selecionado
+                }}
+                disabled={!selectedColaboradorId}
               >
-                {isUploading ? 'Enviando...' : 'Enviar'}
+                Confirmar
               </Button>
             </DialogFooter>
           </DialogContent>
