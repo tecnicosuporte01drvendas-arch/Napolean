@@ -438,6 +438,7 @@ const Dashboard = () => {
   }, [user]);
 
   const isColaborador = user?.perfil_sistema === 'colaborador' || user?.tipo === 'colaborador';
+  const isGestor = user?.perfil_sistema === 'gestor' || user?.tipo === 'gestor';
 
   // Estados para filtro e ordenação
   const [searchTerm, setSearchTerm] = useState('');
@@ -684,8 +685,8 @@ const Dashboard = () => {
                    <Table className="table-fixed">
                      <TableHeader>
                        <TableRow className="border-border hover:bg-transparent">
-                         <TableHead className={`text-foreground pl-2 pr-0 text-sm ${isColaborador ? 'w-[45px]' : 'w-[200px]'}`}>
-                           {isColaborador ? 'Nome do colaborador' : 'Nome da Empresa'}
+                         <TableHead className={`text-foreground pl-2 pr-0 text-sm ${(isColaborador || isGestor) ? 'w-[90px]' : 'w-[200px]'}`}>
+                           {(isColaborador || isGestor) ? 'Nome do colaborador' : 'Nome da Empresa'}
                          </TableHead>
                          <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 1</TableHead>
                          <TableHead className="text-center text-foreground whitespace-nowrap px-0.5 text-sm min-w-[50px]">Etapa 2</TableHead>
@@ -722,7 +723,7 @@ const Dashboard = () => {
                              }`}
                              onClick={isColaborador ? undefined : () => navigate(getRoute())}
                            >
-                             <TableCell className={`pl-2 pr-0 ${isColaborador ? 'w-[45px]' : 'w-[200px]'}`}>
+                             <TableCell className={`pl-2 pr-0 ${(isColaborador || isGestor) ? 'w-[90px]' : 'w-[200px]'}`}>
                                <div className="font-semibold text-foreground text-sm truncate" title={person.name}>
                                  {person.name}
                                </div>
